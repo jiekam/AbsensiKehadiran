@@ -1,5 +1,57 @@
 const API_URL = 'https://absensikehadiran-production.up.railway.app';
 
+// Check if user is already logged in - prevent going back to login page
+function checkAuthAndRedirect() {
+    const token = localStorage.getItem('token');
+    const isAdmin = localStorage.getItem('isAdmin');
+    const siswa = localStorage.getItem('siswa');
+    
+    if (token) {
+        // User is already logged in, redirect to appropriate dashboard
+        if (isAdmin === 'true') {
+            // Admin user - redirect to admin dashboard
+            window.location.href = 'admin-dashboard.html';
+            return true; // Indicates redirect happened
+        } else if (siswa) {
+            // Regular student - redirect to student dashboard
+            window.location.href = 'dashboard.html';
+            return true; // Indicates redirect happened
+        }
+    }
+    return false; // No redirect needed
+}
+
+// Check on page load
+checkAuthAndRedirect();
+
+// Check when page becomes visible (user switches tabs/windows)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        checkAuthAndRedirect();
+    }
+});
+
+// Check before page unload (user tries to navigate away)
+window.addEventListener('beforeunload', () => {
+    checkAuthAndRedirect();
+});
+
+// Check on focus (user clicks back to tab)
+window.addEventListener('focus', () => {
+    checkAuthAndRedirect();
+});
+
+// Prevent back navigation to login page if user is already logged in
+window.addEventListener('popstate', (event) => {
+    if (checkAuthAndRedirect()) {
+        // Push current state to prevent going back
+        history.pushState(null, '', window.location.href);
+    }
+});
+
+// Push state on page load to enable back button detection
+history.pushState(null, '', window.location.href);
+
 // Get elements
 const loginLoadingOverlay = document.getElementById('loginLoadingOverlay');
 const memeModal = document.getElementById('memeModal');
@@ -406,29 +458,27 @@ function spawnTrail(x, y) {
 
 // Check if user is already logged in
 window.addEventListener('DOMContentLoaded', () => {
+    // First check: if already logged in, redirect immediately
+    if (checkAuthAndRedirect()) {
+        return; // Stop execution if redirect happened
+    }
+    
     // Show loading on page load
     showLoading('Memuat halaman...');
     
     // Simulate page load time
     setTimeout(() => {
-        const token = localStorage.getItem('token');
-        const isAdmin = localStorage.getItem('isAdmin');
-        
-        if (token) {
-            // User is already logged in, redirect to appropriate dashboard
-            showLoading('Mengalihkan...');
-            if (isAdmin === 'true') {
-                window.location.href = 'admin-dashboard.html';
-            } else {
-                window.location.href = 'dashboard.html';
-            }
-        } else {
-            // Hide loading after page is ready
-            setTimeout(() => {
-                hideLoading();
-                // Initialize cursor light effect
-                initCursorLight();
-            }, 300);
+        // Double check token (in case it was set during page load)
+        if (checkAuthAndRedirect()) {
+            return; // Stop if redirect happened
         }
+        
+        // User is not logged in, show login page
+        // Hide loading after page is ready
+        setTimeout(() => {
+            hideLoading();
+            // Initialize cursor light effect
+            initCursorLight();
+        }, 300);
     }, 500);
 });
