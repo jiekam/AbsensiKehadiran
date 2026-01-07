@@ -160,6 +160,34 @@ loginFormSiswa.addEventListener('submit', async (e) => {
             localStorage.setItem('siswa', JSON.stringify(data.siswa));
             localStorage.removeItem('isAdmin');
             
+            // Login to Supabase Auth for RLS (if Supabase is available)
+            // User MUST be logged in to Supabase Auth for RLS to work with auth.jwt()
+            if (typeof supabase !== 'undefined' && data.supabaseEmail) {
+                try {
+                    // Initialize Supabase client first
+                    const configResponse = await fetch(`${API_URL}/api/config`);
+                    if (configResponse.ok) {
+                        const config = await configResponse.json();
+                        if (config.supabaseUrl && config.supabaseAnonKey) {
+                            const supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                            
+                            // Store Supabase config for dashboard.js
+                            localStorage.setItem('supabaseEmail', data.supabaseEmail);
+                            localStorage.setItem('supabaseUrl', config.supabaseUrl);
+                            localStorage.setItem('supabaseAnonKey', config.supabaseAnonKey);
+                            
+                            // If backend provided session token, set session
+                            if (data.supabaseSessionToken) {
+                                localStorage.setItem('supabaseSessionToken', data.supabaseSessionToken);
+                            }
+                        }
+                    }
+                } catch (supabaseError) {
+                    console.warn('Supabase Auth setup failed, continuing with login:', supabaseError);
+                    // Continue with login even if Supabase Auth fails
+                }
+            }
+            
             // Show success animation
             siswaForm.classList.add('success');
             

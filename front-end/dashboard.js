@@ -424,6 +424,65 @@ async function initializeSupabase() {
         // Check if supabase is available (from CDN)
         if (typeof supabase !== 'undefined') {
             supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+            
+            // Check if user is logged in to Supabase Auth (required for RLS)
+            const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+            
+            if (userError || !user) {
+                console.warn('User not logged in to Supabase Auth, attempting to sign in...');
+                
+                // Try to restore session from localStorage
+                const supabaseEmail = localStorage.getItem('supabaseEmail');
+                const supabaseSessionToken = localStorage.getItem('supabaseSessionToken');
+                
+                if (supabaseEmail) {
+                    if (supabaseSessionToken) {
+                        // Try to set session with token from backend
+                        try {
+                            await supabaseClient.auth.setSession({
+                                access_token: supabaseSessionToken,
+                                refresh_token: ''
+                            });
+                        } catch (sessionError) {
+                            console.warn('Failed to set session with token, trying passwordless:', sessionError);
+                            // Fallback to passwordless sign in
+                            await supabaseClient.auth.signInWithOtp({
+                                email: supabaseEmail
+                            });
+                        }
+                    } else {
+                        // Sign in with passwordless (OTP)
+                        await supabaseClient.auth.signInWithOtp({
+                            email: supabaseEmail
+                        });
+                    }
+                    
+                    // Verify user is now logged in
+                    const { data: { user: newUser }, error: newUserError } = await supabaseClient.auth.getUser();
+                    if (newUserError || !newUser) {
+                        console.warn('⚠️ User still not logged in to Supabase Auth after sign in attempt');
+                        console.warn('RLS may not work correctly. Please check Supabase Auth configuration.');
+                    } else {
+                        const nis = newUser.user_metadata?.nis;
+                        if (nis) {
+                            console.log('✅ User logged in to Supabase Auth with NIS:', nis);
+                        } else {
+                            console.warn('⚠️ NIS not found in user metadata, RLS may not work correctly');
+                        }
+                    }
+                } else {
+                    console.warn('⚠️ Supabase email not found in localStorage, RLS may not work');
+                }
+            } else {
+                // User is already logged in, verify NIS is in metadata
+                const nis = user.user_metadata?.nis;
+                if (!nis) {
+                    console.warn('⚠️ NIS not found in user metadata, RLS may not work correctly');
+                } else {
+                    console.log('✅ User logged in to Supabase Auth with NIS:', nis);
+                }
+            }
+            
             console.log('Supabase client initialized for realtime');
         } else {
             console.warn('Supabase library not loaded, realtime will be disabled');
