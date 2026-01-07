@@ -10,67 +10,215 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="login-wrapper">
-        <div class="login-container">
-            <div class="login-card">
-                <div class="login-header">
-                    <div class="logo-icon">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <h1 class="login-title">Masuk</h1>
-                    <p class="login-subtitle">Masukkan kredensial Anda</p>
-                </div>
-                
-                <form id="loginForm" class="login-form">
-                    <div class="form-group">
-                        <label for="nama" class="form-label">Nama</label>
-                        <input 
-                            type="text" 
-                            id="nama" 
-                            name="nama" 
-                            class="form-input" 
-                            placeholder="Masukkan Nama"
-                            required
-                            autocomplete="off"
-                        >
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="nis" class="form-label">NIS</label>
-                        <input 
-                            type="text" 
-                            id="nis" 
-                            name="nis" 
-                            class="form-input" 
-                            placeholder="Masukkan NIS"
-                            required
-                            autocomplete="off"
-                        >
-                    </div>
-                    
-                    <div id="errorMessage" class="error-message" style="display: none;"></div>
-                    
-                    <button type="submit" class="login-button" id="loginButton">
-                        <span class="button-text">Masuk</span>
-                        <span class="button-loader" style="display: none;">
-                            <svg class="spinner" viewBox="0 0 24 24">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
-                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75"/>
-                            </svg>
-                        </span>
-                    </button>
-                </form>
-            </div>
+    <div class="login-wrapper" id="loginWrapper">
+        <!-- Background Image -->
+        <div class="background-image"></div>
+        
+        <!-- Cursor Light Effect -->
+        <div class="cursor-light" id="cursorLight"></div>
+        <!-- Cursor Trail Container -->
+        <div class="cursor-trail-container" id="cursorTrailContainer"></div>
+        
+        <!-- Animated Background Elements -->
+        <div class="background-animation">
+            <!-- Floating Particles -->
+            <div class="particle particle-1"></div>
+            <div class="particle particle-2"></div>
+            <div class="particle particle-3"></div>
+            <div class="particle particle-4"></div>
+            <div class="particle particle-5"></div>
+            <div class="particle particle-6"></div>
+            
+            <!-- Brush Strokes -->
+            <div class="brush-stroke brush-1"></div>
+            <div class="brush-stroke brush-2"></div>
+            <div class="brush-stroke brush-3"></div>
+            
+            <!-- Animated Shapes -->
+            <div class="animated-shape shape-circle"></div>
+            <div class="animated-shape shape-triangle"></div>
+            <div class="animated-shape shape-square"></div>
+            
+            <!-- Gradient Orbs -->
+            <div class="gradient-orb orb-1"></div>
+            <div class="gradient-orb orb-2"></div>
+            <div class="gradient-orb orb-3"></div>
         </div>
         
-        <div class="background-shapes">
-            <div class="shape shape-1"></div>
-            <div class="shape shape-2"></div>
-            <div class="shape shape-3"></div>
+        <!-- Loading Overlay -->
+        <div class="login-loading-overlay" id="loginLoadingOverlay">
+            <div class="login-loading-content">
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
+                <span class="loading-text">Memuat...</span>
+            </div>
+        </div>
+
+        <div class="login-container">
+            <div class="login-layout">
+                <!-- Login Type Switcher (Left Side) -->
+                <div class="login-switcher">
+                    <button class="switcher-btn active" data-type="siswa" id="siswaBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Siswa</span>
+                    </button>
+                    <button class="switcher-btn" data-type="admin" id="adminBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 15C15.866 15 19 11.866 19 8C19 4.13401 15.866 1 12 1C8.13401 1 5 4.13401 5 8C5 11.866 8.13401 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8.21 13.89L7 23L12 20L17 23L15.79 13.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Admin</span>
+                    </button>
+                </div>
+
+                <!-- Forms Container (Center) -->
+                <div class="forms-container">
+                    <div class="forms-wrapper">
+                        <!-- Student Login Form -->
+                        <div class="login-card active" id="siswaForm">
+                    <div class="login-header">
+                        <div class="logo-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h1 class="login-title">Masuk sebagai Siswa</h1>
+                        <p class="login-subtitle">Masukkan kredensial Anda</p>
+                    </div>
+                    
+                    <form id="loginFormSiswa" class="login-form">
+                        <div class="form-group">
+                            <label for="namaSiswa" class="form-label">Nama</label>
+                            <input 
+                                type="text" 
+                                id="namaSiswa" 
+                                name="nama" 
+                                class="form-input" 
+                                placeholder="Masukkan Nama"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="nisSiswa" class="form-label">NIS</label>
+                            <input 
+                                type="text" 
+                                id="nisSiswa" 
+                                name="nis" 
+                                class="form-input" 
+                                placeholder="Masukkan NIS"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <div id="errorMessageSiswa" class="error-message" style="display: none;"></div>
+                        
+                        <button type="submit" class="login-button" id="loginButtonSiswa">
+                            <span class="button-text">Masuk</span>
+                            <span class="button-loader" style="display: none;">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+                                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75"/>
+                                </svg>
+                            </span>
+                        </button>
+                        </form>
+                        </div>
+
+                        <!-- Admin Login Form -->
+                        <div class="login-card" id="adminForm">
+                    <div class="login-header">
+                        <div class="logo-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h1 class="login-title">Masuk sebagai Admin</h1>
+                        <p class="login-subtitle">Masukkan kredensial admin Anda</p>
+                    </div>
+                    
+                    <form id="loginFormAdmin" class="login-form">
+                        <div class="form-group">
+                            <label for="namaAdmin" class="form-label">Nama</label>
+                            <input 
+                                type="text" 
+                                id="namaAdmin" 
+                                name="nama" 
+                                class="form-input" 
+                                placeholder="Masukkan Nama"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="nisAdmin" class="form-label">NIS</label>
+                            <input 
+                                type="text" 
+                                id="nisAdmin" 
+                                name="nis" 
+                                class="form-input" 
+                                placeholder="Masukkan NIS"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="passwordAdmin" class="form-label">Password</label>
+                            <input 
+                                type="password" 
+                                id="passwordAdmin" 
+                                name="password" 
+                                class="form-input" 
+                                placeholder="Masukkan Password"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <div id="errorMessageAdmin" class="error-message" style="display: none;"></div>
+                        
+                        <button type="submit" class="login-button" id="loginButtonAdmin">
+                            <span class="button-text">Masuk</span>
+                            <span class="button-loader" style="display: none;">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+                                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75"/>
+                                </svg>
+                            </span>
+                        </button>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meme Popup Modal -->
+    <div class="meme-modal-overlay" id="memeModal">
+        <div class="meme-modal-content">
+            <div class="meme-header">
+                <h2 class="meme-title">Bruhh... Lu kira ini website pemerintah</h2>
+            </div>
+            <div class="meme-body">
+                <p class="meme-text">Beliau pikir beliau adalah admin</p>
+                <p class="meme-subtext">Mff ini bukan sistem kom****</p>
+            </div>
+            <button class="meme-close-btn" id="memeCloseBtn">OK, ngerti</button>
         </div>
     </div>
     

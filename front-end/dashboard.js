@@ -2,18 +2,109 @@ const API_URL = 'http://localhost:5000';
 
 // Check authentication
 const token = localStorage.getItem('token');
+const isAdmin = localStorage.getItem('isAdmin');
+
 if (!token) {
     window.location.href = 'index.html';
 }
+
+// Redirect admin to admin dashboard
+if (isAdmin === 'true') {
+    window.location.href = 'admin-dashboard.html';
+}
+
+// Theme Management
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+}
+
+// Initialize theme on load
+initTheme();
+
+// Theme toggle button
+const themeToggle = document.getElementById('themeToggle');
+if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+}
+
+// Helper function to handle API errors
+async function handleApiResponse(response) {
+    const contentType = response.headers.get('content-type');
+    let data;
+
+    if (!response.ok) {
+        // Try to get error message from response
+        if (contentType && contentType.includes('application/json')) {
+            try {
+                data = await response.json();
+            } catch (e) {
+                data = { message: response.statusText || 'Terjadi kesalahan' };
+            }
+        } else {
+            try {
+                const text = await response.text();
+                data = { message: text || response.statusText || 'Terjadi kesalahan' };
+            } catch (e) {
+                data = { message: response.statusText || 'Terjadi kesalahan' };
+            }
+        }
+
+        if (response.status === 401 || response.status === 403) {
+            const errorMsg = data.message || 'Sesi telah berakhir. Silakan login kembali.';
+            console.error('Authentication error:', errorMsg);
+            alert(errorMsg);
+            localStorage.removeItem('token');
+            localStorage.removeItem('siswa');
+            window.location.href = 'index.html';
+            return null;
+        }
+        
+        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // If response is OK, parse JSON
+    if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+    } else {
+        const text = await response.text();
+        throw new Error('Server mengembalikan respons yang tidak valid');
+    }
+
+    return data;
+}
+
+// Supabase client (will be initialized after fetching config)
+let supabaseClient = null;
+let currentUserData = null; // Store user data for realtime filtering
+let actionSubscription = null;
+let historySubscription = null;
 
 // Elements
 const welcomeTitle = document.getElementById('welcomeTitle');
 const dateDisplay = document.getElementById('dateDisplay');
 const refreshBtn = document.getElementById('refreshBtn');
+const refreshBtnHeader = document.getElementById('refreshBtnHeader');
 const logoutBtn = document.getElementById('logoutBtn');
 const userInfoContent = document.getElementById('userInfoContent');
 const machineStatusContent = document.getElementById('machineStatusContent');
 const absenStatusContent = document.getElementById('absenStatusContent');
+const dashboardTab = document.getElementById('dashboardTab');
+const historyTab = document.getElementById('historyTab');
+const analyticsTab = document.getElementById('analyticsTab');
+const dashboardPage = document.getElementById('dashboardPage');
+const historyPage = document.getElementById('historyPage');
+const analyticsPage = document.getElementById('analyticsPage');
+const monthSelector = document.getElementById('monthSelector');
+const historyContent = document.getElementById('historyContent');
+const analyticsContent = document.getElementById('analyticsContent');
 
 // Set current date
 const today = new Date();
@@ -30,21 +121,33 @@ async function fetchDashboardData() {
     try {
         userInfoContent.innerHTML = `
             <div class="loading-cell">
-                <div class="loading-spinner"></div>
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
                 <span>Memuat data...</span>
             </div>
         `;
         
         machineStatusContent.innerHTML = `
             <div class="loading-cell">
-                <div class="loading-spinner"></div>
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
                 <span>Memuat status...</span>
             </div>
         `;
 
         absenStatusContent.innerHTML = `
             <div class="loading-cell">
-                <div class="loading-spinner"></div>
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
                 <span>Memuat status...</span>
             </div>
         `;
@@ -57,31 +160,25 @@ async function fetchDashboardData() {
             },
         });
 
-        const contentType = response.headers.get('content-type');
-        let data;
-
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else {
-            const text = await response.text();
-            throw new Error('Server mengembalikan respons yang tidak valid');
-        }
-
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('siswa');
-                window.location.href = 'index.html';
-                return;
-            }
-            throw new Error(data.message || 'Gagal mengambil data');
-        }
+        const data = await handleApiResponse(response);
+        if (!data) return; // Error already handled
 
         if (data.user) {
+            // Store user data for realtime filtering
+            currentUserData = {
+                rfid: data.user.rfid,
+                nis: data.user.nis
+            };
+            
             renderUserInfo(data.user);
             renderMachineStatus(data.machineStatus);
-            renderAbsenStatus(data.absenStatus, data.absenWaktu);
+            renderAbsenStatus(data.absenStatus, data.absenWaktu, data.hasRfid);
             welcomeTitle.textContent = `Hallo ${data.user.nama}`;
+            
+            // Setup realtime subscriptions if Supabase is initialized
+            if (supabaseClient && !actionSubscription) {
+                setupRealtimeSubscriptions();
+            }
         } else {
             userInfoContent.innerHTML = `
                 <div class="error-message">
@@ -110,7 +207,24 @@ async function fetchDashboardData() {
 }
 
 // Render absen status
-function renderAbsenStatus(status, waktu) {
+function renderAbsenStatus(status, waktu, hasRfid) {
+    // If RFID is not registered, show warning
+    if (!hasRfid) {
+        absenStatusContent.innerHTML = `
+            <div class="absen-status-display rfid-warning">
+                <div class="emoji-container rfid-warning-icon">
+                    <span class="emoji shake">🔴</span>
+                </div>
+                <div class="absen-status-text">
+                    <h3 class="absen-status-title">RFID belum terdaftar !</h3>
+                    <p class="absen-status-subtitle">Kamu tidak bisa absen, silahkan hubungi sekretaris untuk mendaftarkan RFID !</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // If RFID is registered, show normal status
     let emoji = '';
     let title = '';
     let subtitle = '';
@@ -254,10 +368,31 @@ function renderMachineStatus(status) {
     `;
 }
 
-// Refresh button
-refreshBtn.addEventListener('click', () => {
+// Refresh button function
+function handleRefresh() {
     fetchDashboardData();
-});
+    // Add visual feedback
+    if (refreshBtnHeader) {
+        refreshBtnHeader.classList.add('refreshing');
+        setTimeout(() => {
+            refreshBtnHeader.classList.remove('refreshing');
+        }, 1000);
+    }
+    if (refreshBtn) {
+        refreshBtn.classList.add('refreshing');
+        setTimeout(() => {
+            refreshBtn.classList.remove('refreshing');
+        }, 1000);
+    }
+}
+
+// Refresh button
+if (refreshBtnHeader) {
+    refreshBtnHeader.addEventListener('click', handleRefresh);
+}
+if (refreshBtn) {
+    refreshBtn.addEventListener('click', handleRefresh);
+}
 
 // Logout button
 logoutBtn.addEventListener('click', () => {
@@ -268,10 +403,558 @@ logoutBtn.addEventListener('click', () => {
     }
 });
 
-// Initial load
-fetchDashboardData();
+// Initialize Supabase and setup realtime
+async function initializeSupabase() {
+    try {
+        // Fetch Supabase config from backend
+        const configResponse = await fetch(`${API_URL}/api/config`);
+        if (!configResponse.ok) {
+            console.warn('Failed to fetch Supabase config, realtime will be disabled');
+            return;
+        }
+        
+        const config = await configResponse.json();
+        
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+            console.warn('Supabase config incomplete, realtime will be disabled');
+            return;
+        }
+        
+        // Initialize Supabase client
+        // Check if supabase is available (from CDN)
+        if (typeof supabase !== 'undefined') {
+            supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+            console.log('Supabase client initialized for realtime');
+        } else {
+            console.warn('Supabase library not loaded, realtime will be disabled');
+        }
+    } catch (error) {
+        console.error('Error initializing Supabase:', error);
+    }
+}
 
-// Auto refresh every 30 seconds
+// Setup realtime subscriptions
+function setupRealtimeSubscriptions() {
+    if (!supabaseClient || !currentUserData) {
+        return;
+    }
+    
+    // Clean up existing subscriptions
+    if (actionSubscription) {
+        actionSubscription.unsubscribe();
+    }
+    if (historySubscription) {
+        historySubscription.unsubscribe();
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Subscribe to action table changes (for machine status)
+    // Listen to ALL changes, not just today's - remove filter
+    actionSubscription = supabaseClient
+        .channel('action-changes-' + Date.now())
+        .on(
+            'postgres_changes',
+            {
+                event: '*', // INSERT, UPDATE, DELETE
+                schema: 'public',
+                table: 'action'
+                // NO FILTER - listen to all changes including status updates
+            },
+            (payload) => {
+                console.log('🔄 Action table changed:', payload);
+                console.log('Event:', payload.eventType);
+                console.log('Old status:', payload.old?.status);
+                console.log('New status:', payload.new?.status);
+                // Always refresh to get latest machine status
+                fetchDashboardData();
+            }
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Subscribed to action table - listening to ALL changes');
+            } else {
+                console.log('Action subscription status:', status);
+            }
+        });
+    
+    // Subscribe to history table changes (for absen status and history)
+    if (currentUserData.rfid && currentUserData.nis) {
+        historySubscription = supabaseClient
+            .channel('history-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // INSERT, UPDATE, DELETE
+                    schema: 'public',
+                    table: 'history',
+                    filter: `rfid=eq.${currentUserData.rfid}`
+                },
+                (payload) => {
+                    console.log('History table changed:', payload);
+                    // Refresh dashboard data
+                    fetchDashboardData();
+                    
+                    // If on history page, refresh history
+                    if (historyPage.classList.contains('active')) {
+                        const selectedMonth = monthSelector.value || null;
+                        fetchHistory(selectedMonth);
+                    }
+                    
+                    // If on analytics page, refresh analytics
+                    if (analyticsPage.classList.contains('active')) {
+                        fetchAnalytics();
+                    }
+                }
+            )
+            .subscribe();
+    }
+    
+    console.log('Realtime subscriptions setup complete');
+}
+
+// Cleanup subscriptions on page unload
+window.addEventListener('beforeunload', () => {
+    if (actionSubscription) {
+        actionSubscription.unsubscribe();
+    }
+    if (historySubscription) {
+        historySubscription.unsubscribe();
+    }
+});
+
+// Initial load
+async function initializeApp() {
+    await initializeSupabase();
+    await fetchDashboardData();
+    // Setup realtime after user data is loaded
+    setTimeout(() => {
+        setupRealtimeSubscriptions();
+    }, 1000);
+}
+
+initializeApp();
+
+// Auto refresh every 30 seconds (as backup, realtime should handle most updates)
 setInterval(() => {
     fetchDashboardData();
 }, 30000);
+
+// Navigation Functions
+function switchPage(page) {
+    if (page === 'dashboard') {
+        dashboardTab.classList.add('active');
+        historyTab.classList.remove('active');
+        analyticsTab.classList.remove('active');
+        dashboardPage.classList.add('active');
+        historyPage.classList.remove('active');
+        analyticsPage.classList.remove('active');
+    } else if (page === 'history') {
+        historyTab.classList.add('active');
+        dashboardTab.classList.remove('active');
+        analyticsTab.classList.remove('active');
+        historyPage.classList.add('active');
+        dashboardPage.classList.remove('active');
+        analyticsPage.classList.remove('active');
+        // Fetch history when switching to history page
+        if (monthSelector.options.length === 1) {
+            fetchHistory();
+        }
+    } else if (page === 'analytics') {
+        analyticsTab.classList.add('active');
+        dashboardTab.classList.remove('active');
+        historyTab.classList.remove('active');
+        analyticsPage.classList.add('active');
+        dashboardPage.classList.remove('active');
+        historyPage.classList.remove('active');
+        // Fetch analytics when switching to analytics page
+        fetchAnalytics();
+    }
+}
+
+// Tab navigation
+dashboardTab.addEventListener('click', () => switchPage('dashboard'));
+historyTab.addEventListener('click', () => switchPage('history'));
+analyticsTab.addEventListener('click', () => switchPage('analytics'));
+
+// History Functions
+async function fetchHistory(selectedMonth = null) {
+    try {
+        historyContent.innerHTML = `
+            <div class="loading-cell">
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
+                <span>Memuat history...</span>
+            </div>
+        `;
+
+        const url = selectedMonth 
+            ? `${API_URL}/dashboard/history?bulan=${selectedMonth}`
+            : `${API_URL}/dashboard/history`;
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        const data = await handleApiResponse(response);
+        if (!data) return; // Error already handled
+
+        // Populate month selector if available months are provided
+        if (data.availableMonths && data.availableMonths.length > 0) {
+            populateMonthSelector(data.availableMonths, selectedMonth);
+        }
+
+        if (data.history && data.history.length > 0) {
+            renderHistory(data.history);
+        } else {
+            renderHistoryEmpty();
+        }
+    } catch (error) {
+        console.error('Error fetching history:', error);
+        historyContent.innerHTML = `
+            <div class="error-message">
+                ${error.message || 'Terjadi kesalahan saat memuat history'}
+            </div>
+        `;
+    }
+}
+
+function populateMonthSelector(availableMonths, selectedMonth = null) {
+    // Clear existing options except "Semua Bulan"
+    while (monthSelector.options.length > 1) {
+        monthSelector.remove(1);
+    }
+
+    // Add available months
+    availableMonths.forEach(month => {
+        const option = document.createElement('option');
+        option.value = month.bulanKey;
+        option.textContent = month.bulan;
+        if (selectedMonth && month.bulanKey === selectedMonth) {
+            option.selected = true;
+        }
+        monthSelector.appendChild(option);
+    });
+}
+
+// Month selector change
+monthSelector.addEventListener('change', (e) => {
+    const selectedMonth = e.target.value || null;
+    fetchHistory(selectedMonth);
+});
+
+function renderHistory(historyArray) {
+    if (!historyArray || historyArray.length === 0) {
+        renderHistoryEmpty();
+        return;
+    }
+
+    let html = '';
+
+    historyArray.forEach((monthData) => {
+        html += `
+            <div class="history-month-section">
+                <h3 class="history-month-title">${monthData.bulan}</h3>
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tanggal</th>
+                            <th>Waktu</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        monthData.records.forEach((record) => {
+            const tanggal = new Date(record.tanggal);
+            const tanggalFormatted = tanggal.toLocaleDateString('id-ID', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            let waktuFormatted = record.waktu || '-';
+            if (waktuFormatted !== '-') {
+                try {
+                    const waktuDate = new Date(record.waktu);
+                    if (!isNaN(waktuDate.getTime())) {
+                        waktuFormatted = waktuDate.toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                        });
+                    }
+                } catch (e) {
+                    // Keep original format if parsing fails
+                }
+            }
+
+            const statusLower = (record.status || '').toLowerCase();
+            const statusClass = statusLower === 'hadir' ? 'hadir' : 
+                              statusLower === 'sakit' ? 'sakit' : 
+                              statusLower === 'izin' ? 'izin' : 
+                              statusLower === 'alpha' ? 'alpha' : '';
+
+            html += `
+                <tr>
+                    <td>${record.id}</td>
+                    <td>${tanggalFormatted}</td>
+                    <td>${waktuFormatted}</td>
+                    <td>
+                        <span class="status-badge-table ${statusClass}">${record.status || '-'}</span>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+    });
+
+    historyContent.innerHTML = html;
+}
+
+function renderHistoryEmpty() {
+    historyContent.innerHTML = `
+        <div class="history-empty">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 2V6M16 2V6M3 10H21M5 4H19C20.1046 4 21 4.89543 21 6V20C21 21.1046 20.1046 22 19 22H5C3.89543 22 3 21.1046 3 20V6C3 4.89543 3.89543 4 5 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>Belum ada history absensi</h3>
+            <p>History absensi akan muncul setelah kamu melakukan absen</p>
+        </div>
+    `;
+}
+
+// Analytics Functions
+async function fetchAnalytics() {
+    try {
+        analyticsContent.innerHTML = `
+            <div class="loading-cell">
+                <div class="loading-boxes">
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                    <div class="loading-box"></div>
+                </div>
+                <span>Memuat analytics...</span>
+            </div>
+        `;
+
+        const response = await fetch(`${API_URL}/dashboard/analytics`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        const data = await handleApiResponse(response);
+        if (!data) return; // Error already handled
+
+        if (data.analytics && data.analytics.length > 0) {
+            renderAnalytics(data.analytics, data.total);
+        } else {
+            renderAnalyticsEmpty();
+        }
+    } catch (error) {
+        console.error('Error fetching analytics:', error);
+        analyticsContent.innerHTML = `
+            <div class="error-message">
+                ${error.message || 'Terjadi kesalahan saat memuat analytics'}
+            </div>
+        `;
+    }
+}
+
+function renderAnalytics(analyticsArray, total) {
+    let html = '';
+
+    // Store total data for modal
+    window.analyticsTotalData = total;
+
+    // Total Summary Card
+    const hasSakit = (total.sakit || 0) > 0;
+    const hasIzin = (total.izin || 0) > 0;
+    const indicatorText = [];
+    const indicatorTooltip = [];
+    if (hasSakit) {
+        indicatorText.push('S');
+        indicatorTooltip.push('Sakit');
+    }
+    if (hasIzin) {
+        indicatorText.push('I');
+        indicatorTooltip.push('Izin');
+    }
+    
+    html += `
+        <div class="analytics-total-card">
+            <h3 class="analytics-total-title">Total Semua Bulan</h3>
+            <div class="analytics-total-grid">
+                <div class="analytics-total-item clickable" onclick="showAnalyticsDetail('total')" title="Klik untuk melihat detail">
+                    <div class="clickable-header">
+                        <span class="analytics-total-label">Absen Tercatat</span>
+                        <svg class="click-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <span class="analytics-total-value absen-tercatat">${total.absenTercatat || 0}</span>
+                    ${indicatorText.length > 0 ? `
+                        <div class="analytics-indicator-wrapper">
+                            <div class="analytics-indicator" title="${indicatorTooltip.join(', ')}">
+                                ${indicatorText.join(' ')}
+                            </div>
+                            <span class="analytics-indicator-hint">Ada ${indicatorTooltip.join(' dan ')}</span>
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="analytics-total-item">
+                    <span class="analytics-total-label">Total Alpha</span>
+                    <span class="analytics-total-value alpha">${total.alpha || 0}</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Analytics Per Bulan
+    analyticsArray.forEach((monthData) => {
+        const monthHasSakit = (monthData.sakit || 0) > 0;
+        const monthHasIzin = (monthData.izin || 0) > 0;
+        const monthIndicatorText = [];
+        const monthIndicatorTooltip = [];
+        if (monthHasSakit) {
+            monthIndicatorText.push('S');
+            monthIndicatorTooltip.push('Sakit');
+        }
+        if (monthHasIzin) {
+            monthIndicatorText.push('I');
+            monthIndicatorTooltip.push('Izin');
+        }
+        
+        html += `
+            <div class="analytics-month-section">
+                <div class="analytics-month-header">
+                    <h3 class="analytics-month-title">${monthData.bulan}</h3>
+                </div>
+                <div class="analytics-month-stats">
+                    <div class="analytics-stat-item clickable" onclick="showAnalyticsDetail('${monthData.bulanKey}')" title="Klik untuk melihat detail">
+                        <div class="clickable-header">
+                            <span class="analytics-stat-label">Absen Tercatat</span>
+                            <svg class="click-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <span class="analytics-stat-value absen-tercatat">${monthData.absenTercatat || 0}</span>
+                        ${monthIndicatorText.length > 0 ? `
+                            <div class="analytics-indicator-wrapper">
+                                <div class="analytics-indicator" title="${monthIndicatorTooltip.join(', ')}">
+                                    ${monthIndicatorText.join(' ')}
+                                </div>
+                                <span class="analytics-indicator-hint">Ada ${monthIndicatorTooltip.join(' dan ')}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="analytics-stat-item">
+                        <span class="analytics-stat-label">Alpha</span>
+                        <span class="analytics-stat-value alpha">${monthData.alpha || 0}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Store month data for modal
+        window[`analyticsMonthData_${monthData.bulanKey}`] = monthData;
+    });
+
+    analyticsContent.innerHTML = html;
+}
+
+// Show analytics detail modal
+window.showAnalyticsDetail = function(type) {
+    let detailData;
+    let title;
+    
+    if (type === 'total') {
+        detailData = window.analyticsTotalData;
+        title = 'Detail Total Semua Bulan';
+    } else {
+        detailData = window[`analyticsMonthData_${type}`];
+        title = `Detail ${detailData.bulan}`;
+    }
+    
+    if (!detailData) return;
+    
+    const modal = document.getElementById('analyticsDetailModal');
+    const modalTitle = document.getElementById('analyticsDetailTitle');
+    const modalBody = document.getElementById('analyticsDetailBody');
+    
+    modalTitle.textContent = title;
+    
+    modalBody.innerHTML = `
+        <div class="analytics-detail-grid">
+            <div class="analytics-detail-item">
+                <span class="analytics-detail-label">Hadir</span>
+                <span class="analytics-detail-value hadir">${detailData.hadir || 0}</span>
+            </div>
+            <div class="analytics-detail-item">
+                <span class="analytics-detail-label">Sakit</span>
+                <span class="analytics-detail-value sakit">${detailData.sakit || 0}</span>
+            </div>
+            <div class="analytics-detail-item">
+                <span class="analytics-detail-label">Izin</span>
+                <span class="analytics-detail-value izin">${detailData.izin || 0}</span>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('active');
+};
+
+// Close modal
+window.closeAnalyticsDetail = function() {
+    const modal = document.getElementById('analyticsDetailModal');
+    modal.classList.remove('active');
+};
+
+// Close modal when clicking outside
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('analyticsDetailModal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeAnalyticsDetail();
+            }
+        });
+    }
+    
+    // Close modal with ESC key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
+            closeAnalyticsDetail();
+        }
+    });
+});
+
+function renderAnalyticsEmpty() {
+    analyticsContent.innerHTML = `
+        <div class="analytics-empty">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 3V21H21M7 16L12 11L16 15L21 10M21 10H16M21 10V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>Belum ada data analytics</h3>
+            <p>Data analytics akan muncul setelah kamu melakukan absen</p>
+        </div>
+    `;
+}
+
