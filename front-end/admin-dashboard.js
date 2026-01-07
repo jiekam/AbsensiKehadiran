@@ -976,6 +976,10 @@ async function initializeSupabaseForAlat() {
         }
 
         alatSupabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+        
+        // EXPOSE CLIENT KE window (DEBUG ONLY)
+        window.supabaseClient = alatSupabaseClient;
+        
         setupAlatRealtimeSubscription();
     } catch (error) {
         console.error('Error initializing Supabase for Alat:', error);

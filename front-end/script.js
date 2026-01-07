@@ -171,6 +171,9 @@ loginFormSiswa.addEventListener('submit', async (e) => {
                         if (config.supabaseUrl && config.supabaseAnonKey) {
                             const supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
                             
+                            // EXPOSE CLIENT KE window (DEBUG ONLY)
+                            window.supabaseClient = supabaseClient;
+                            
                             // Store Supabase config for dashboard.js
                             localStorage.setItem('supabaseEmail', data.supabaseEmail);
                             localStorage.setItem('supabaseUrl', config.supabaseUrl);

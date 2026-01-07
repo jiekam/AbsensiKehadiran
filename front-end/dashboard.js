@@ -425,6 +425,9 @@ async function initializeSupabase() {
         if (typeof supabase !== 'undefined') {
             supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
             
+            // EXPOSE CLIENT KE window (DEBUG ONLY)
+            window.supabaseClient = supabaseClient;
+            
             // Check if user is logged in to Supabase Auth (required for RLS)
             const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
             
