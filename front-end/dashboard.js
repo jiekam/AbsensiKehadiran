@@ -1,4 +1,4 @@
-const API_URL = 'https://absensikehadiran-production.up.railway.app/auth';
+const API_URL = 'https://absensikehadiran-production.up.railway.app';
 
 // Check authentication
 const token = localStorage.getItem('token');

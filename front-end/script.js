@@ -1,4 +1,4 @@
-const API_URL = 'https://absensikehadiran-production.up.railway.app/auth';
+const API_URL = 'https://absensikehadiran-production.up.railway.app';
 
 // Get elements
 const loginLoadingOverlay = document.getElementById('loginLoadingOverlay');
@@ -130,7 +130,7 @@ loginFormSiswa.addEventListener('submit', async (e) => {
     setLoading(true, false);
     
     try {
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -221,7 +221,7 @@ loginFormAdmin.addEventListener('submit', async (e) => {
     setLoading(true, true);
     
     try {
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
