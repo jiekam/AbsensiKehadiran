@@ -363,9 +363,15 @@ export const createHistory = async (req, res) => {
 // Get action data for today
 export const getActionToday = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        // Convert to WIB (UTC+7)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
 
-        const { data: action, error } = await supabase
+        let { data: action, error } = await supabase
             .from('action')
             .select('*')
             .eq('tanggal', today)
@@ -374,6 +380,32 @@ export const getActionToday = async (req, res) => {
         if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
             console.error('Error fetching action:', error);
             return res.status(500).json({ message: 'Gagal mengambil data action' });
+        }
+
+        // If no action record exists for today, create one with status "Active"
+        if (!action) {
+            console.log(`No action record found for today (${today}), creating new record with status "Active"...`);
+            
+            const { data: newAction, error: createError } = await supabase
+                .from('action')
+                .insert({
+                    nama: 'absensi',
+                    tanggal: today,
+                    status: 'Active'
+                })
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating action record:', createError);
+                return res.status(500).json({ 
+                    message: 'Gagal membuat data action',
+                    error: createError.message 
+                });
+            } else {
+                console.log('Successfully created action record for today:', newAction);
+                action = newAction;
+            }
         }
 
         return res.json({
@@ -390,7 +422,13 @@ export const getActionToday = async (req, res) => {
 export const createOrUpdateAction = async (req, res) => {
     try {
         const { nama, status } = req.body;
-        const today = new Date().toISOString().split('T')[0];
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        // Convert to WIB (UTC+7)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
 
         if (!status || !['Active', 'NonActive'].includes(status)) {
             return res.status(400).json({ message: 'Status tidak valid' });
