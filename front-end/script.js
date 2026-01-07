@@ -174,15 +174,26 @@ loginFormSiswa.addEventListener('submit', async (e) => {
                             // EXPOSE CLIENT KE window (DEBUG ONLY)
                             window.supabaseClient = supabaseClient;
                             
+                            // FRONTEND HARUS LOGIN SUPABASE AUTH
+                            // Passwordless OTP - paling gampang
+                            const { data: otpData, error: otpError } = await supabaseClient.auth.signInWithOtp({
+                                email: data.supabaseEmail // Format: ${nis}@siswa.local
+                            });
+                            
+                            if (otpError) {
+                                console.warn('Supabase Auth OTP sign in failed:', otpError);
+                                // Continue with login even if OTP fails
+                            } else {
+                                console.log('✅ Supabase Auth OTP sent to:', data.supabaseEmail);
+                                console.log('📌 User needs to check email for OTP code');
+                                // Note: For automatic login, backend should handle session
+                                // But for now, user will need to enter OTP from email
+                            }
+                            
                             // Store Supabase config for dashboard.js
                             localStorage.setItem('supabaseEmail', data.supabaseEmail);
                             localStorage.setItem('supabaseUrl', config.supabaseUrl);
                             localStorage.setItem('supabaseAnonKey', config.supabaseAnonKey);
-                            
-                            // If backend provided session token, set session
-                            if (data.supabaseSessionToken) {
-                                localStorage.setItem('supabaseSessionToken', data.supabaseSessionToken);
-                            }
                         }
                     }
                 } catch (supabaseError) {

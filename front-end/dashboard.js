@@ -436,39 +436,40 @@ async function initializeSupabase() {
                 
                 // Try to restore session from localStorage
                 const supabaseEmail = localStorage.getItem('supabaseEmail');
-                const supabaseSessionToken = localStorage.getItem('supabaseSessionToken');
                 
                 if (supabaseEmail) {
-                    if (supabaseSessionToken) {
-                        // Try to set session with token from backend
-                        try {
-                            await supabaseClient.auth.setSession({
-                                access_token: supabaseSessionToken,
-                                refresh_token: ''
-                            });
-                        } catch (sessionError) {
-                            console.warn('Failed to set session with token, trying passwordless:', sessionError);
-                            // Fallback to passwordless sign in
-                            await supabaseClient.auth.signInWithOtp({
-                                email: supabaseEmail
-                            });
-                        }
-                    } else {
-                        // Sign in with passwordless (OTP)
-                        await supabaseClient.auth.signInWithOtp({
-                            email: supabaseEmail
-                        });
-                    }
+                    // FRONTEND HARUS LOGIN SUPABASE AUTH
+                    // Passwordless OTP - paling gampang
+                    const { data: otpData, error: otpError } = await supabaseClient.auth.signInWithOtp({
+                        email: supabaseEmail // Format: ${nis}@siswa.local
+                    });
                     
-                    // Verify user is now logged in
-                    const { data: { user: newUser }, error: newUserError } = await supabaseClient.auth.getUser();
-                    if (newUserError || !newUser) {
-                        console.warn('⚠️ User still not logged in to Supabase Auth after sign in attempt');
+                    if (otpError) {
+                        console.warn('⚠️ Supabase Auth OTP sign in failed:', otpError);
                         console.warn('RLS may not work correctly. Please check Supabase Auth configuration.');
                     } else {
+                        console.log('✅ Supabase Auth OTP sent to:', supabaseEmail);
+                        console.log('📌 Supabase otomatis simpan session setelah OTP verified');
+                        console.log('📌 JWT Supabase dibuat, auth.jwt() jadi ADA');
+                        
+                        // Note: User needs to verify OTP from email
+                        // For automatic flow, backend should handle session creation
+                        // But for now, we'll wait for user to verify OTP
+                    }
+                    
+                    // Check again after OTP attempt
+                    const { data: { user: newUser }, error: newUserError } = await supabaseClient.auth.getUser();
+                    if (newUserError || !newUser) {
+                        console.warn('⚠️ User still not logged in to Supabase Auth');
+                        console.warn('⚠️ User needs to verify OTP from email to complete login');
+                        console.warn('⚠️ RLS will not work until user is logged in to Supabase Auth');
+                    } else {
                         const nis = newUser.user_metadata?.nis;
+                        const role = newUser.user_metadata?.role;
                         if (nis) {
-                            console.log('✅ User logged in to Supabase Auth with NIS:', nis);
+                            console.log('✅ User logged in to Supabase Auth');
+                            console.log('✅ NIS in metadata:', nis);
+                            console.log('✅ Role in metadata:', role || 'not set');
                         } else {
                             console.warn('⚠️ NIS not found in user metadata, RLS may not work correctly');
                         }
@@ -477,12 +478,18 @@ async function initializeSupabase() {
                     console.warn('⚠️ Supabase email not found in localStorage, RLS may not work');
                 }
             } else {
-                // User is already logged in, verify NIS is in metadata
+                // User is already logged in, verify NIS and role are in metadata
                 const nis = user.user_metadata?.nis;
+                const role = user.user_metadata?.role;
                 if (!nis) {
                     console.warn('⚠️ NIS not found in user metadata, RLS may not work correctly');
+                } else if (!role) {
+                    console.warn('⚠️ Role not found in user metadata, RLS may not work correctly');
                 } else {
-                    console.log('✅ User logged in to Supabase Auth with NIS:', nis);
+                    console.log('✅ User logged in to Supabase Auth');
+                    console.log('✅ NIS in metadata:', nis);
+                    console.log('✅ Role in metadata:', role);
+                    console.log('✅ auth.jwt() is available for RLS');
                 }
             }
             
