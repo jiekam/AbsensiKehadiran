@@ -51,6 +51,46 @@ export const login = async (req, res) => {
                 return res.status(500).json({ message: 'Konfigurasi server tidak lengkap' });
             }
 
+            // Create or update user in Supabase Auth with NIS and ROLE in metadata (for admin)
+            // Role diambil dari table siswa_xirpl, BUKAN dari request body
+            const email = `${siswa.nis}@siswa.local`;
+            
+            try {
+                const { data: existingUsers } = await supabase.auth.admin.listUsers();
+                const existingUser = existingUsers?.users?.find(u => u.email === email);
+                
+                if (existingUser) {
+                    // Update existing user metadata with NIS and ROLE
+                    await supabase.auth.admin.updateUserById(
+                        existingUser.id,
+                        {
+                            user_metadata: {
+                                nis: siswa.nis,
+                                nama: siswa.nama,
+                                id: siswa.id,
+                                role: siswa.role || 'admin' // Role dari table, default 'admin' jika null
+                            }
+                        }
+                    );
+                } else {
+                    // Create new user with NIS and ROLE in metadata
+                    await supabase.auth.admin.createUser({
+                        email: email,
+                        password: `admin_${siswa.nis}_${Date.now()}`,
+                        email_confirm: true,
+                        user_metadata: {
+                            nis: siswa.nis,
+                            nama: siswa.nama,
+                            id: siswa.id,
+                            role: siswa.role || 'admin' // Role dari table, default 'admin' jika null
+                        }
+                    });
+                }
+            } catch (supabaseError) {
+                console.error('Error creating/updating Supabase Auth user for admin:', supabaseError);
+                // Continue with login even if Supabase Auth fails
+            }
+
             // Generate token for admin
             const token = JWT.sign(
                 {
@@ -67,7 +107,8 @@ export const login = async (req, res) => {
                 message: 'Login admin berhasil',
                 token,
                 siswa,
-                isAdmin: true
+                isAdmin: true,
+                supabaseEmail: email // Email for Supabase Auth
             });
         }
 
@@ -92,20 +133,23 @@ export const login = async (req, res) => {
             let authUserId = null;
             
             if (existingUser) {
-                // Update existing user metadata with NIS (required for RLS)
+                // Update existing user metadata with NIS and ROLE (required for RLS)
+                // Role diambil dari table siswa_xirpl, BUKAN dari request body
                 const { data: updatedUser } = await supabase.auth.admin.updateUserById(
                     existingUser.id,
                     {
                         user_metadata: {
                             nis: siswa.nis,
                             nama: siswa.nama,
-                            id: siswa.id
+                            id: siswa.id,
+                            role: siswa.role || 'siswa' // Role dari table, default 'siswa' jika null
                         }
                     }
                 );
                 authUserId = existingUser.id;
             } else {
-                // Create new user with NIS in metadata
+                // Create new user with NIS and ROLE in metadata
+                // Role diambil dari table siswa_xirpl, BUKAN dari request body
                 const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
                     email: email,
                     password: `siswa_${siswa.nis}_${Date.now()}`, // Temporary password
@@ -113,7 +157,8 @@ export const login = async (req, res) => {
                     user_metadata: {
                         nis: siswa.nis,
                         nama: siswa.nama,
-                        id: siswa.id
+                        id: siswa.id,
+                        role: siswa.role || 'siswa' // Role dari table, default 'siswa' jika null
                     }
                 });
                 
