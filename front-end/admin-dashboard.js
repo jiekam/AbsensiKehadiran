@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000';
+const API_URL = 'https://absensikehadiran-production.up.railway.app/auth';
 
 // Theme Management
 function initTheme() {
