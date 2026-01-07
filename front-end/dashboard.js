@@ -107,14 +107,37 @@ const historyContent = document.getElementById('historyContent');
 const analyticsContent = document.getElementById('analyticsContent');
 
 // Set current date
-const today = new Date();
-const dateString = today.toLocaleDateString('id-ID', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-});
-dateDisplay.textContent = dateString;
+let lastKnownDate = null;
+
+function updateDateDisplay() {
+    const today = new Date();
+    const dateString = today.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    dateDisplay.textContent = dateString;
+    
+    // Get date in YYYY-MM-DD format for comparison (WIB timezone)
+    // Convert to WIB (UTC+7) to match backend
+    const wibOffset = 7 * 60; // WIB is UTC+7
+    const utc = today.getTime() + (today.getTimezoneOffset() * 60000);
+    const wibTime = new Date(utc + (wibOffset * 60000));
+    const todayString = wibTime.toISOString().split('T')[0];
+    
+    // Check if date has changed
+    if (lastKnownDate && lastKnownDate !== todayString) {
+        console.log('Date changed detected, refreshing data...');
+        console.log('Previous date:', lastKnownDate, 'New date:', todayString);
+        fetchDashboardData();
+    }
+    
+    lastKnownDate = todayString;
+}
+
+// Initialize date display
+updateDateDisplay();
 
 // Fetch dashboard data
 async function fetchDashboardData() {
@@ -393,6 +416,27 @@ if (refreshBtnHeader) {
 if (refreshBtn) {
     refreshBtn.addEventListener('click', handleRefresh);
 }
+
+// Auto-refresh when page becomes visible (user switches tabs/windows)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        // Update date display and check if date changed
+        updateDateDisplay();
+        // Also refresh data to ensure it's up-to-date
+        fetchDashboardData();
+    }
+});
+
+// Auto-refresh when window gains focus
+window.addEventListener('focus', () => {
+    updateDateDisplay();
+    fetchDashboardData();
+});
+
+// Check date periodically (every minute) to catch date changes
+setInterval(() => {
+    updateDateDisplay();
+}, 60000); // Check every minute
 
 // Logout button
 logoutBtn.addEventListener('click', () => {

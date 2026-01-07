@@ -5,8 +5,13 @@ export const getDashboard = async (req, res) => {
         // Get user from token (set by auth middleware)
         const userId = req.user.id;
         
-        // Get current date in YYYY-MM-DD format
-        const today = new Date().toISOString().split('T')[0];
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        // Convert to WIB (UTC+7)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
         
         // Get logged in user data
         const { data: siswa, error: siswaError } = await supabase
