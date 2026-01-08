@@ -1,16 +1,8 @@
 import { supabase } from '../config/supabase.js';
 
-// Helper function to get fetch - use global if available, otherwise import node-fetch
-async function getFetch() {
-    if (typeof fetch !== 'undefined') {
-        // Node.js 18+ has native fetch
-        return fetch;
-    } else {
-        // Fallback to node-fetch for older Node.js versions
-        const nodeFetch = await import('node-fetch');
-        return nodeFetch.default;
-    }
-}
+// Use global fetch (available in Node.js 18+)
+// Railway uses Node.js 18+, so we can use native fetch
+// No need for node-fetch dependency
 
 // Get all siswa data
 export const getAllSiswa = async (req, res) => {
@@ -599,7 +591,11 @@ export const sendWhatsAppMessage = async (req, res) => {
         
         let response;
         try {
-            const fetch = await getFetch();
+            // Use global fetch (Node.js 18+)
+            // Railway uses Node.js 18+, so native fetch is available
+            if (typeof fetch === 'undefined') {
+                throw new Error('fetch is not available. Railway requires Node.js 18+ which has native fetch support.');
+            }
             response = await fetch(fonnteUrl, {
                 method: 'POST',
                 headers: {
