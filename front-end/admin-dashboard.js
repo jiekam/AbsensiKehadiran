@@ -177,50 +177,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         whatsappPhoneInput.addEventListener('input', updateHistoryWhatsAppMessagePreview);
     }
 
-    // WhatsApp phone select change handler
-    const whatsappPhoneSelect = document.getElementById('whatsappPhoneSelect');
-    if (whatsappPhoneSelect) {
-        whatsappPhoneSelect.addEventListener('change', (e) => {
-            const phoneInput = document.getElementById('whatsappPhoneInput');
-            if (e.target.value === 'manual') {
-                // Show manual input
-                if (phoneInput) {
-                    phoneInput.style.display = 'block';
-                    phoneInput.required = true;
-                    phoneInput.focus();
-                }
-            } else if (e.target.value) {
-                // Student selected - check if phone number exists
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                const phoneNumber = selectedOption.value;
-                
-                if (phoneNumber && phoneNumber.trim() !== '') {
-                    // Phone number exists, use it
-                    if (phoneInput) {
-                        phoneInput.value = phoneNumber;
-                        phoneInput.style.display = 'none';
-                        phoneInput.required = false;
-                    }
-                } else {
-                    // No phone number in database, show manual input
-                    showToast('Nomor WhatsApp siswa tidak tersedia di database. Silakan pilih "Input Manual" untuk memasukkan nomor secara manual.', 'error');
-                    e.target.value = 'manual';
-                    if (phoneInput) {
-                        phoneInput.style.display = 'block';
-                        phoneInput.required = true;
-                        phoneInput.focus();
-                    }
-                }
-            } else {
-                // Hide manual input
-                if (phoneInput) {
-                    phoneInput.style.display = 'none';
-                    phoneInput.required = false;
-                    phoneInput.value = '';
-                }
-            }
-        });
-    }
 
     // Tab Navigation
     const dashboardTab = document.getElementById('dashboardTab');
@@ -1891,7 +1847,7 @@ if (document.readyState === 'loading') {
 // Format history message for WhatsApp
 function formatHistoryMessage(historyData) {
     if (!historyData || historyData.length === 0) {
-        return '📊 *REKAPITULASI ABSENSI*\n\nTidak ada data absensi untuk ditampilkan.';
+        return 'Absensi\n\nTidak ada data absensi untuk ditampilkan.';
     }
 
     // Get date from first record or current date
@@ -1902,13 +1858,26 @@ function formatHistoryMessage(historyData) {
     if (selectedDate) {
         const date = new Date(selectedDate);
         dateText = date.toLocaleDateString('id-ID', { 
-            weekday: 'long', 
             year: 'numeric', 
             month: 'long', 
             day: 'numeric' 
         });
     } else {
-        dateText = 'Semua Tanggal';
+        // Use date from first record if available
+        if (historyData[0] && historyData[0].tanggal) {
+            const date = new Date(historyData[0].tanggal);
+            dateText = date.toLocaleDateString('id-ID', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        } else {
+            dateText = new Date().toLocaleDateString('id-ID', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
     }
 
     // Group by status
@@ -1919,51 +1888,46 @@ function formatHistoryMessage(historyData) {
         'Alpha': historyData.filter(h => h.status === 'Alpha')
     };
 
-    const total = historyData.length;
-    const hadir = grouped['Hadir'].length;
     const sakit = grouped['Sakit'].length;
     const izin = grouped['Izin'].length;
     const alpha = grouped['Alpha'].length;
 
-    let message = `📊 *REKAPITULASI ABSENSI*\n\n`;
-    message += `📅 ${dateText}\n\n`;
-    message += `📈 *Statistik:*\n`;
-    message += `✅ Hadir: ${hadir} siswa\n`;
-    message += `🤒 Sakit: ${sakit} siswa\n`;
-    message += `📝 Izin: ${izin} siswa\n`;
-    message += `❌ Alpha: ${alpha} siswa\n`;
-    message += `📊 Total: ${total} siswa\n\n`;
+    // Start message with header
+    let message = `Absensi ${dateText}\n\n`;
 
-    message += `📋 *Detail Absensi:*\n\n`;
+    // Add statistics (only show if > 0)
+    const stats = [];
+    if (sakit > 0) stats.push(`Sakit: ${sakit}`);
+    if (izin > 0) stats.push(`Izin: ${izin}`);
+    if (alpha > 0) stats.push(`Alpha: ${alpha}`);
     
-    Object.keys(grouped).forEach(status => {
+    if (stats.length > 0) {
+        message += stats.join('\n') + '\n\n';
+    }
+
+    // Add details (only for Sakit, Izin, Alpha - exclude Hadir)
+    const detailStatuses = ['Sakit', 'Izin', 'Alpha'];
+    let hasDetails = false;
+    
+    detailStatuses.forEach(status => {
         if (grouped[status].length > 0) {
-            message += `*${status}:*\n`;
+            hasDetails = true;
+            message += `${status}:\n`;
             grouped[status].forEach(record => {
-                message += `• ${record.nama || 'N/A'} (NIS: ${record.nis || 'N/A'})`;
-                if (record.waktu) {
-                    message += ` - ${record.waktu}`;
-                }
-                if (record.tanggal && !selectedDate) {
-                    message += ` [${record.tanggal}]`;
-                }
-                message += `\n`;
+                message += `${record.nama || 'N/A'}\n`;
             });
             message += `\n`;
         }
     });
 
-    message += `\n_Generated by Sistem Absensi_`;
-
-    return message;
+    return message.trim();
 }
 
 // Show send history WhatsApp modal
-async function showSendHistoryWhatsAppModal() {
+function showSendHistoryWhatsAppModal() {
     console.log('showSendHistoryWhatsAppModal called');
     const modal = document.getElementById('sendWhatsAppModal');
     const phoneInput = document.getElementById('whatsappPhoneInput');
-    const phoneSelect = document.getElementById('whatsappPhoneSelect');
     const preview = document.getElementById('whatsappMessagePreview');
 
     console.log('Modal:', modal);
@@ -1985,13 +1949,7 @@ async function showSendHistoryWhatsAppModal() {
     // Reset form
     if (phoneInput) {
         phoneInput.value = '';
-        phoneInput.style.display = 'none';
-        phoneInput.required = false;
-    }
-    if (phoneSelect) {
-        phoneSelect.value = '';
-        // Load siswa list for phone selection
-        await loadSiswaForWhatsApp(phoneSelect);
+        phoneInput.focus();
     }
 
     updateHistoryWhatsAppMessagePreview();
@@ -2002,50 +1960,6 @@ async function showSendHistoryWhatsAppModal() {
     }
 }
 
-// Load siswa list for WhatsApp selection
-async function loadSiswaForWhatsApp(selectElement) {
-    if (!selectElement) return;
-
-    // Clear existing options except first two
-    selectElement.innerHTML = '<option value="">-- Pilih Nomor atau Input Manual --</option><option value="manual">📝 Input Manual</option>';
-
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Token tidak ditemukan');
-        }
-
-        const response = await fetch(`${API_URL}/api/admin/siswa`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Gagal mengambil data siswa');
-        }
-
-        const data = await response.json();
-        const siswaList = data.siswa || [];
-
-        // Add siswa to dropdown (for future: if phone number exists in database)
-        siswaList.forEach(siswa => {
-            const option = document.createElement('option');
-            // For now, no phone number in database, so we'll just show name
-            // If phone number exists later, use: option.value = siswa.phone || '';
-            option.value = ''; // Empty because no phone field yet
-            option.textContent = `${siswa.nama} (NIS: ${siswa.nis})`;
-            option.dataset.nama = siswa.nama;
-            option.dataset.nis = siswa.nis;
-            selectElement.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error loading siswa for WhatsApp:', error);
-        // Continue with manual input option
-    }
-}
 
 // Make function available globally for debugging
 window.showSendHistoryWhatsAppModal = showSendHistoryWhatsAppModal;
@@ -2070,38 +1984,19 @@ function updateHistoryWhatsAppMessagePreview() {
 // Send WhatsApp message
 async function sendWhatsAppMessage() {
     const phoneInput = document.getElementById('whatsappPhoneInput');
-    const phoneSelect = document.getElementById('whatsappPhoneSelect');
     const confirmBtn = document.getElementById('confirmSendWhatsAppBtn');
     
-    if (!phoneSelect || !historyData || historyData.length === 0) {
+    if (!phoneInput || !historyData || historyData.length === 0) {
         showToast('Data tidak lengkap', 'error');
         return;
     }
 
-    let phone = '';
-    const selectedValue = phoneSelect.value;
-
-    if (selectedValue === 'manual') {
-        // Use manual input
-        if (!phoneInput || !phoneInput.value.trim()) {
-            showToast('Nomor WhatsApp wajib diisi', 'error');
-            if (phoneInput) phoneInput.focus();
-            return;
-        }
-        phone = phoneInput.value.trim();
-    } else if (selectedValue) {
-        // Student selected - check if phone number exists
-        const selectedOption = phoneSelect.options[phoneSelect.selectedIndex];
-        const phoneNumber = selectedOption.value;
-        
-        if (phoneNumber && phoneNumber.trim() !== '') {
-            phone = phoneNumber.trim();
-        } else {
-            showToast('Nomor WhatsApp siswa tidak tersedia di database. Silakan pilih "Input Manual" untuk memasukkan nomor secara manual.', 'error');
-            return;
-        }
-    } else {
-        showToast('Pilih nomor WhatsApp atau pilih "Input Manual"', 'error');
+    // Get phone number from input
+    const phone = phoneInput.value.trim();
+    
+    if (!phone) {
+        showToast('Nomor WhatsApp wajib diisi', 'error');
+        phoneInput.focus();
         return;
     }
 
@@ -2115,11 +2010,29 @@ async function sendWhatsAppMessage() {
         return;
     }
 
-    // Disable button and show loading
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('whatsappLoadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('show');
+    }
+
+    // Disable button and ensure no button loading is shown
     if (confirmBtn) {
         confirmBtn.disabled = true;
-        confirmBtn.querySelector('.button-text').textContent = 'Mengirim...';
-        confirmBtn.querySelector('.button-loader').style.display = 'flex';
+        // Remove any loading class
+        confirmBtn.classList.remove('loading');
+        // Ensure button loader is hidden
+        const buttonLoader = confirmBtn.querySelector('.button-loader');
+        if (buttonLoader) {
+            buttonLoader.style.display = 'none';
+            buttonLoader.style.visibility = 'hidden';
+        }
+        // Ensure button text is correct and visible
+        const buttonText = confirmBtn.querySelector('.button-text');
+        if (buttonText) {
+            buttonText.textContent = 'Kirim Pesan';
+            buttonText.style.display = 'inline';
+        }
     }
 
     try {
@@ -2156,11 +2069,28 @@ async function sendWhatsAppMessage() {
         console.error('Error sending WhatsApp message:', error);
         showToast(error.message || 'Gagal mengirim pesan WhatsApp', 'error');
     } finally {
-        // Re-enable button
+        // Hide loading overlay
+        const loadingOverlayFinal = document.getElementById('whatsappLoadingOverlay');
+        if (loadingOverlayFinal) {
+            loadingOverlayFinal.classList.remove('show');
+        }
+        // Re-enable button and ensure button loader is hidden
         if (confirmBtn) {
             confirmBtn.disabled = false;
-            confirmBtn.querySelector('.button-text').textContent = 'Kirim Pesan';
-            confirmBtn.querySelector('.button-loader').style.display = 'none';
+            // Remove any loading class
+            confirmBtn.classList.remove('loading');
+            // Ensure button loader is always hidden
+            const buttonLoader = confirmBtn.querySelector('.button-loader');
+            if (buttonLoader) {
+                buttonLoader.style.display = 'none';
+                buttonLoader.style.visibility = 'hidden';
+            }
+            // Ensure button text is correct and visible
+            const buttonText = confirmBtn.querySelector('.button-text');
+            if (buttonText) {
+                buttonText.textContent = 'Kirim Pesan';
+                buttonText.style.display = 'inline';
+            }
         }
     }
 }

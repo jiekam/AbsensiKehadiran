@@ -2420,15 +2420,83 @@ body {
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
+/* Always hide button loader - we use overlay instead */
 .button-loader {
-    display: none;
+    display: none !important;
+    visibility: hidden !important;
 }
 
-.btn-primary.loading .button-text {
-    display: none;
+/* Ensure button loader is always hidden, even with loading class */
+.btn-primary .button-loader,
+.btn-primary.loading .button-loader,
+#confirmSendWhatsAppBtn .button-loader,
+#confirmSendWhatsAppBtn.loading .button-loader {
+    display: none !important;
+    visibility: hidden !important;
 }
 
-.btn-primary.loading .button-loader {
+/* Ensure button text is always visible */
+.btn-primary .button-text,
+.btn-primary.loading .button-text,
+#confirmSendWhatsAppBtn .button-text,
+#confirmSendWhatsAppBtn.loading .button-text {
+    display: inline !important;
+    visibility: visible !important;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
     display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    backdrop-filter: blur(8px);
+}
+
+.loading-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.loading-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 40px;
+    background: var(--bg);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border);
+}
+
+/* Light mode */
+:root .loading-overlay-content {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+}
+
+/* Dark mode */
+[data-theme="dark"] .loading-overlay-content {
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+.loading-overlay-content p {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+    text-align: center;
 }
 
