@@ -203,6 +203,7 @@ export const getAllHistory = async (req, res) => {
                 waktu: record.waktu,
                 tanggal: record.tanggal,
                 status: record.status,
+                keterangan: record.keterangan || null,
                 rfid: record.rfid,
                 nis: record.nis,
                 nama: record.nama || siswa?.nama || null,
@@ -224,15 +225,69 @@ export const getAllHistory = async (req, res) => {
 export const updateHistoryStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, keterangan } = req.body;
 
-        if (!status || !['Hadir', 'Sakit', 'Izin', 'Alpha'].includes(status)) {
+        // Get current record to check existing status
+        const { data: currentRecord, error: fetchError } = await supabase
+            .from('history')
+            .select('status')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !currentRecord) {
+            return res.status(404).json({ message: 'Data history tidak ditemukan' });
+        }
+
+        const currentStatus = currentRecord.status;
+        const newStatus = status || currentStatus; // Use existing status if not provided
+
+        if (!['Hadir', 'Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
             return res.status(400).json({ message: 'Status tidak valid' });
+        }
+
+        // Build update data
+        const updateData = {};
+        
+        // Update status if provided
+        if (status && status !== currentStatus) {
+            updateData.status = status;
+        }
+
+        // Update keterangan
+        if (keterangan !== undefined) {
+            // Keterangan hanya diperlukan untuk Sakit, Izin, dan Alpha
+            if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+                if (!keterangan || keterangan.trim() === '') {
+                    return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                }
+                updateData.keterangan = keterangan.trim();
+            } else {
+                // For Hadir, set keterangan to null
+                updateData.keterangan = null;
+            }
+        } else if (status && status !== currentStatus) {
+            // If status changed but no keterangan provided, handle based on new status
+            if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+                // If changing to Sakit/Izin/Alpha without keterangan, check if existing keterangan exists
+                const { data: existingRecord } = await supabase
+                    .from('history')
+                    .select('keterangan')
+                    .eq('id', id)
+                    .single();
+                
+                if (!existingRecord?.keterangan) {
+                    return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                }
+                // Keep existing keterangan if available
+            } else {
+                // Changing to Hadir, clear keterangan
+                updateData.keterangan = null;
+            }
         }
 
         const { error } = await supabase
             .from('history')
-            .update({ status })
+            .update(updateData)
             .eq('id', id);
 
         if (error) {
@@ -276,7 +331,7 @@ export const deleteHistory = async (req, res) => {
 // Create new history record (manual absen)
 export const createHistory = async (req, res) => {
     try {
-        const { nis, rfid, tanggal, status } = req.body;
+        const { nis, rfid, tanggal, status, keterangan } = req.body;
 
         if (!nis || !tanggal || !status) {
             return res.status(400).json({ message: 'NIS, tanggal, dan status diperlukan' });
@@ -284,6 +339,11 @@ export const createHistory = async (req, res) => {
 
         if (!['Hadir', 'Sakit', 'Izin', 'Alpha'].includes(status)) {
             return res.status(400).json({ message: 'Status tidak valid' });
+        }
+
+        // Keterangan hanya diperlukan untuk Sakit, Izin, dan Alpha
+        if (['Sakit', 'Izin', 'Alpha'].includes(status) && !keterangan) {
+            return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + status });
         }
 
         // Get student data from siswa_xirpl table
@@ -333,7 +393,8 @@ export const createHistory = async (req, res) => {
             rfid: finalRfid,
             tanggal: tanggal,
             waktu: waktu,
-            status: status
+            status: status,
+            keterangan: (['Sakit', 'Izin', 'Alpha'].includes(status) && keterangan) ? keterangan.trim() : null
         };
 
         console.log('Inserting history to Supabase:', insertData);

@@ -391,7 +391,7 @@ function renderHistoryTable() {
     if (historyData.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="9" style="text-align: center; padding: 40px; color: var(--text-light);">
+                <td colspan="10" style="text-align: center; padding: 40px; color: var(--text-light);">
                     Tidak ada data history untuk tanggal yang dipilih
                 </td>
             </tr>
@@ -404,6 +404,8 @@ function renderHistoryTable() {
         // Use siswa_id (id) for display, history_id for operations
         const displayId = record.id || record.siswa_id || '-';
         const historyId = record.history_id || record.id; // Fallback to id if history_id not available
+        const keterangan = record.keterangan || '-';
+        const showKeterangan = ['Sakit', 'Izin', 'Alpha'].includes(record.status);
         
         row.innerHTML = `
             <td>${record.waktu || '-'}</td>
@@ -420,6 +422,14 @@ function renderHistoryTable() {
                     <option value="Izin" ${record.status === 'Izin' ? 'selected' : ''}>Izin</option>
                     <option value="Alpha" ${record.status === 'Alpha' ? 'selected' : ''}>Alpha</option>
                 </select>
+            </td>
+            <td style="max-width: 200px; word-wrap: break-word; white-space: normal;">
+                ${showKeterangan ? `
+                    <div class="keterangan-cell" data-id="${historyId}" data-original-keterangan="${keterangan}">
+                        <span class="keterangan-text" title="Double-click untuk edit">${keterangan}</span>
+                        <input type="text" class="keterangan-input" value="${keterangan}" style="display: none;" />
+                    </div>
+                ` : '-'}
             </td>
             <td>
                 <button class="btn-delete" data-id="${historyId}" title="Hapus">
@@ -445,7 +455,31 @@ function renderHistoryTable() {
                 return; // No change
             }
 
-            await updateHistoryStatus(historyId, newStatus, e.target);
+            // Get existing keterangan from the row
+            const row = e.target.closest('tr');
+            const keteranganCell = row.querySelector('.keterangan-cell');
+            const existingKeterangan = keteranganCell ? keteranganCell.dataset.originalKeterangan : '';
+
+            // Show prompt for keterangan if status is Sakit, Izin, or Alpha
+            let keterangan = '';
+            if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+                // If existing keterangan exists and status is changing from another status that requires keterangan, use it as default
+                const defaultKeterangan = (existingKeterangan && existingKeterangan !== '-') ? existingKeterangan : '';
+                keterangan = prompt(`Masukkan keterangan untuk status ${newStatus}:`, defaultKeterangan);
+                if (keterangan === null) {
+                    // User cancelled, revert to original status
+                    e.target.value = originalStatus;
+                    return;
+                }
+                if (!keterangan || keterangan.trim() === '') {
+                    alert('Keterangan wajib diisi untuk status ' + newStatus);
+                    e.target.value = originalStatus;
+                    return;
+                }
+                keterangan = keterangan.trim();
+            }
+
+            await updateHistoryStatus(historyId, newStatus, e.target, keterangan);
         });
     });
 
@@ -459,14 +493,75 @@ function renderHistoryTable() {
             }
         });
     });
+
+    // Add event listeners for keterangan edit
+    const keteranganCells = tableBody.querySelectorAll('.keterangan-cell');
+    keteranganCells.forEach(cell => {
+        const textSpan = cell.querySelector('.keterangan-text');
+        const inputField = cell.querySelector('.keterangan-input');
+        const historyId = cell.dataset.id;
+        const originalKeterangan = cell.dataset.originalKeterangan;
+
+        // Double-click to edit
+        textSpan.addEventListener('dblclick', () => {
+            textSpan.style.display = 'none';
+            inputField.style.display = 'block';
+            inputField.focus();
+            inputField.select();
+        });
+
+        // Save on Enter or blur
+        const saveKeterangan = async () => {
+            const newKeterangan = inputField.value.trim();
+            if (newKeterangan === originalKeterangan) {
+                // No change, just hide input
+                textSpan.style.display = 'inline';
+                inputField.style.display = 'none';
+                return;
+            }
+
+            if (!newKeterangan) {
+                alert('Keterangan tidak boleh kosong');
+                inputField.value = originalKeterangan;
+                textSpan.style.display = 'inline';
+                inputField.style.display = 'none';
+                return;
+            }
+
+            // Update keterangan
+            await updateKeterangan(historyId, newKeterangan, cell, textSpan, inputField);
+        };
+
+        inputField.addEventListener('blur', saveKeterangan);
+        inputField.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveKeterangan();
+            } else if (e.key === 'Escape') {
+                inputField.value = originalKeterangan;
+                textSpan.style.display = 'inline';
+                inputField.style.display = 'none';
+            }
+        });
+    });
 }
 
-// Update History Status
-async function updateHistoryStatus(historyId, newStatus, selectElement) {
+// Update Keterangan
+async function updateKeterangan(historyId, newKeterangan, cellElement, textSpan, inputField) {
     try {
         const token = localStorage.getItem('token');
         if (!token) {
             throw new Error('Token tidak ditemukan');
+        }
+
+        // Get current status from the row
+        const row = cellElement.closest('tr');
+        const statusSelect = row.querySelector('.status-select');
+        const currentStatus = statusSelect ? statusSelect.value : '';
+
+        // Validate that status requires keterangan
+        if (!['Sakit', 'Izin', 'Alpha'].includes(currentStatus)) {
+            throw new Error('Keterangan hanya dapat diubah untuk status Sakit, Izin, atau Alpha');
         }
 
         const response = await fetch(`${API_URL}/api/admin/history/${historyId}/status`, {
@@ -475,7 +570,57 @@ async function updateHistoryStatus(historyId, newStatus, selectElement) {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ status: newStatus })
+            body: JSON.stringify({ 
+                status: currentStatus,
+                keterangan: newKeterangan 
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal memperbarui keterangan' }));
+            throw new Error(errorData.message || 'Gagal memperbarui keterangan');
+        }
+
+        // Update UI
+        textSpan.textContent = newKeterangan;
+        cellElement.dataset.originalKeterangan = newKeterangan;
+        textSpan.style.display = 'inline';
+        inputField.style.display = 'none';
+        
+        showToast('Keterangan berhasil diperbarui', 'success');
+        
+        // Reload history data to ensure sync
+        await loadHistoryData();
+    } catch (error) {
+        console.error('Error updating keterangan:', error);
+        showToast(error.message || 'Gagal memperbarui keterangan', 'error');
+        // Revert to original
+        inputField.value = cellElement.dataset.originalKeterangan;
+        textSpan.style.display = 'inline';
+        inputField.style.display = 'none';
+    }
+}
+
+// Update History Status
+async function updateHistoryStatus(historyId, newStatus, selectElement, keterangan = '') {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const body = { status: newStatus };
+        if (['Sakit', 'Izin', 'Alpha'].includes(newStatus) && keterangan) {
+            body.keterangan = keterangan;
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/history/${historyId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) {
@@ -602,6 +747,37 @@ function showAddAbsenModal() {
 
     modal.classList.add('show');
     loadSiswaBelumAbsen();
+    
+    // Setup status change listener to show/hide keterangan field
+    const statusSelect = document.getElementById('absenStatusSelect');
+    const keteranganFormGroup = document.getElementById('keteranganFormGroup');
+    const keteranganInput = document.getElementById('absenKeteranganInput');
+    
+    if (statusSelect && keteranganFormGroup) {
+        // Remove existing listeners
+        const newStatusSelect = statusSelect.cloneNode(true);
+        statusSelect.parentNode.replaceChild(newStatusSelect, statusSelect);
+        
+        // Add new listener
+        newStatusSelect.addEventListener('change', function() {
+            const status = this.value;
+            if (['Sakit', 'Izin', 'Alpha'].includes(status)) {
+                keteranganFormGroup.style.display = 'block';
+                if (keteranganInput) keteranganInput.required = true;
+            } else {
+                keteranganFormGroup.style.display = 'none';
+                if (keteranganInput) {
+                    keteranganInput.required = false;
+                    keteranganInput.value = '';
+                }
+            }
+        });
+        
+        // Trigger on initial load
+        if (newStatusSelect.value) {
+            newStatusSelect.dispatchEvent(new Event('change'));
+        }
+    }
 }
 
 // Hide Add Absen Modal
@@ -614,8 +790,12 @@ function hideAddAbsenModal() {
     // Reset form
     const siswaSelect = document.getElementById('absenSiswaSelect');
     const statusSelect = document.getElementById('absenStatusSelect');
+    const keteranganInput = document.getElementById('absenKeteranganInput');
+    const keteranganFormGroup = document.getElementById('keteranganFormGroup');
     if (siswaSelect) siswaSelect.value = '';
     if (statusSelect) statusSelect.value = 'Sakit';
+    if (keteranganInput) keteranganInput.value = '';
+    if (keteranganFormGroup) keteranganFormGroup.style.display = 'none';
 }
 
 // Submit Add Absen
@@ -644,6 +824,7 @@ async function submitAddAbsen() {
 
         const siswaSelect = document.getElementById('absenSiswaSelect');
         const statusSelect = document.getElementById('absenStatusSelect');
+        const keteranganInput = document.getElementById('absenKeteranganInput');
         const datePicker = document.getElementById('historyDatePicker');
 
         if (!siswaSelect || !statusSelect || !datePicker) {
@@ -653,9 +834,15 @@ async function submitAddAbsen() {
         const selectedSiswa = siswaSelect.value;
         const status = statusSelect.value;
         const tanggal = datePicker.value;
+        const keterangan = keteranganInput ? keteranganInput.value.trim() : '';
 
         if (!selectedSiswa || !status || !tanggal) {
             throw new Error('Harap lengkapi semua field');
+        }
+
+        // Validate keterangan for Sakit, Izin, Alpha
+        if (['Sakit', 'Izin', 'Alpha'].includes(status) && !keterangan) {
+            throw new Error('Keterangan wajib diisi untuk status ' + status);
         }
 
         const siswa = JSON.parse(selectedSiswa);
@@ -670,7 +857,8 @@ async function submitAddAbsen() {
                 nis: siswa.nis,
                 rfid: siswa.rfid || '',
                 tanggal: tanggal,
-                status: status
+                status: status,
+                keterangan: keterangan
             })
         });
 

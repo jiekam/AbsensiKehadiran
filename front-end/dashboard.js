@@ -782,6 +782,7 @@ function renderHistory(historyArray) {
                             <th>Tanggal</th>
                             <th>Waktu</th>
                             <th>Status</th>
+                            <th>Keterangan</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -816,6 +817,9 @@ function renderHistory(historyArray) {
                               statusLower === 'sakit' ? 'sakit' : 
                               statusLower === 'izin' ? 'izin' : 
                               statusLower === 'alpha' ? 'alpha' : '';
+            
+            const keterangan = record.keterangan || '-';
+            const showKeterangan = ['Sakit', 'Izin', 'Alpha'].includes(record.status);
 
             html += `
                 <tr>
@@ -824,6 +828,9 @@ function renderHistory(historyArray) {
                     <td>${waktuFormatted}</td>
                     <td>
                         <span class="status-badge-table ${statusClass}">${record.status || '-'}</span>
+                    </td>
+                    <td style="max-width: 200px; word-wrap: break-word; white-space: normal;">
+                        ${showKeterangan ? `<span title="${keterangan}">${keterangan}</span>` : '-'}
                     </td>
                 </tr>
             `;

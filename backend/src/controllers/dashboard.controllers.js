@@ -164,7 +164,7 @@ export const getHistoryPerBulan = async (req, res) => {
         // Get all history records for this user
         const { data: history, error: historyError } = await supabase
             .from('history')
-            .select('id, tanggal, waktu, status')
+            .select('id, tanggal, waktu, status, keterangan')
             .eq('rfid', siswa.rfid)
             .eq('nis', siswa.nis)
             .order('tanggal', { ascending: false })
@@ -196,7 +196,8 @@ export const getHistoryPerBulan = async (req, res) => {
                 historyPerBulan[bulanKey].records.push({
                     tanggal: record.tanggal,
                     waktu: record.waktu,
-                    status: record.status
+                    status: record.status,
+                    keterangan: record.keterangan || null
                 });
             });
         }
@@ -214,7 +215,8 @@ export const getHistoryPerBulan = async (req, res) => {
                 id: index + 1,
                 tanggal: record.tanggal,
                 waktu: record.waktu,
-                status: record.status
+                status: record.status,
+                keterangan: record.keterangan || null
             }));
         });
 

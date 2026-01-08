@@ -183,6 +183,7 @@
                                     <th>RFID</th>
                                     <th>Tanggal</th>
                                     <th>Status</th>
+                                    <th>Keterangan</th>
                                     <th>Aksi</th>
                                 </tr>
                             </thead>
@@ -411,6 +412,11 @@
                         <option value="Izin">Izin</option>
                         <option value="Alpha">Alpha</option>
                     </select>
+                </div>
+                <div class="form-group" id="keteranganFormGroup" style="display: none;">
+                    <label for="absenKeteranganInput">Keterangan <span style="color: var(--danger);">*</span>:</label>
+                    <textarea id="absenKeteranganInput" class="form-input" rows="3" placeholder="Masukkan keterangan untuk status ini..." required></textarea>
+                    <small style="color: var(--text-light); margin-top: 4px; display: block;">Keterangan wajib diisi untuk status Sakit, Izin, dan Alpha</small>
                 </div>
             </div>
             <div class="modal-footer">
