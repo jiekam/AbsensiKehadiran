@@ -539,6 +539,272 @@ export const getTodayRecap = async (req, res) => {
     }
 };
 
+// Get student analysis (attendance per month for all students)
+export const getStudentAnalysis = async (req, res) => {
+    try {
+        // Get all students
+        const { data: allSiswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid')
+            .order('nama', { ascending: true });
+
+        if (siswaError) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        // Get all history records
+        const { data: allHistory, error: historyError } = await supabase
+            .from('history')
+            .select('nis, rfid, tanggal, status')
+            .order('tanggal', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Group history by month and student
+        const analysisPerBulan = {};
+        const siswaMap = {};
+
+        // Create siswa map for quick lookup
+        (allSiswa || []).forEach(siswa => {
+            const key = `${siswa.nis}-${siswa.rfid || ''}`;
+            siswaMap[key] = siswa;
+        });
+
+        // Process history records
+        if (allHistory && allHistory.length > 0) {
+            allHistory.forEach(record => {
+                const date = new Date(record.tanggal);
+                const bulanKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const bulan = date.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+                const siswaKey = `${record.nis}-${record.rfid || ''}`;
+
+                if (!analysisPerBulan[bulanKey]) {
+                    analysisPerBulan[bulanKey] = {
+                        bulan: bulan,
+                        bulanKey: bulanKey,
+                        siswa: {}
+                    };
+                }
+
+                if (!analysisPerBulan[bulanKey].siswa[siswaKey]) {
+                    const siswa = siswaMap[siswaKey] || { id: null, nama: record.nis, nis: record.nis, rfid: record.rfid };
+                    analysisPerBulan[bulanKey].siswa[siswaKey] = {
+                        id: siswa.id,
+                        nama: siswa.nama || record.nis,
+                        nis: siswa.nis || record.nis,
+                        rfid: siswa.rfid || record.rfid || '',
+                        hadir: 0,
+                        sakit: 0,
+                        izin: 0,
+                        alpha: 0,
+                        total: 0
+                    };
+                }
+
+                const status = (record.status || '').toLowerCase();
+                if (status === 'hadir') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].hadir++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'sakit') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].sakit++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'izin') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].izin++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'alpha') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].alpha++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                }
+            });
+        }
+
+        // Convert to array format and include all students (even those without history)
+        const analysisArray = Object.keys(analysisPerBulan)
+            .sort((a, b) => b.localeCompare(a)) // Newest first
+            .map(bulanKey => {
+                const bulanData = analysisPerBulan[bulanKey];
+                const siswaArray = Object.values(bulanData.siswa)
+                    .sort((a, b) => a.nama.localeCompare(b.nama));
+
+                return {
+                    bulan: bulanData.bulan,
+                    bulanKey: bulanData.bulanKey,
+                    siswa: siswaArray
+                };
+            });
+
+        // Get all students list (for reference)
+        const allStudentsList = (allSiswa || []).map(siswa => ({
+            id: siswa.id,
+            nama: siswa.nama,
+            nis: siswa.nis,
+            rfid: siswa.rfid || ''
+        }));
+
+        // Calculate activity status for each student
+        // A student is considered "active" if they have at least one attendance record in the last 3 months
+        const now = new Date();
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        const threeMonthsAgoKey = `${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
+
+        const studentActivity = {};
+        allStudentsList.forEach(siswa => {
+            const siswaKey = `${siswa.nis}-${siswa.rfid || ''}`;
+            let isActive = false;
+            let lastActivityMonth = null;
+            let totalRecords = 0;
+
+            // Check if student has records in recent months
+            analysisArray.forEach(bulanData => {
+                const siswaData = bulanData.siswa.find(s => `${s.nis}-${s.rfid || ''}` === siswaKey);
+                if (siswaData && siswaData.total > 0) {
+                    totalRecords += siswaData.total;
+                    if (!lastActivityMonth || bulanData.bulanKey > lastActivityMonth) {
+                        lastActivityMonth = bulanData.bulanKey;
+                    }
+                    // Consider active if has records in last 3 months
+                    if (bulanData.bulanKey >= threeMonthsAgoKey) {
+                        isActive = true;
+                    }
+                }
+            });
+
+            studentActivity[siswaKey] = {
+                isActive: isActive,
+                lastActivityMonth: lastActivityMonth,
+                totalRecords: totalRecords
+            };
+        });
+
+        return res.json({
+            message: 'Data analisis siswa berhasil diambil',
+            analysis: analysisArray,
+            allStudents: allStudentsList,
+            studentActivity: studentActivity
+        });
+    } catch (error) {
+        console.error('Get student analysis error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get individual student statistics (1 year total + monthly breakdown)
+export const getStudentStatistics = async (req, res) => {
+    try {
+        const { nis } = req.params;
+
+        if (!nis) {
+            return res.status(400).json({ message: 'NIS diperlukan' });
+        }
+
+        // Get student data
+        const { data: siswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid')
+            .eq('nis', nis)
+            .single();
+
+        if (siswaError || !siswa) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(404).json({ message: 'Data siswa tidak ditemukan' });
+        }
+
+        // Get current date and calculate 1 year ago
+        const now = new Date();
+        const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+        const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+        // Get all history records for this student in the last year
+        const { data: history, error: historyError } = await supabase
+            .from('history')
+            .select('tanggal, status')
+            .eq('nis', nis)
+            .gte('tanggal', oneYearAgoStr)
+            .order('tanggal', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Calculate total statistics for 1 year
+        const totalStats = {
+            hadir: 0,
+            sakit: 0,
+            izin: 0,
+            alpha: 0,
+            total: 0
+        };
+
+        // Group by month
+        const monthlyStats = {};
+
+        if (history && history.length > 0) {
+            history.forEach(record => {
+                const date = new Date(record.tanggal);
+                const bulanKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const bulan = date.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+
+                // Initialize month if not exists
+                if (!monthlyStats[bulanKey]) {
+                    monthlyStats[bulanKey] = {
+                        bulan: bulan,
+                        bulanKey: bulanKey,
+                        hadir: 0,
+                        sakit: 0,
+                        izin: 0,
+                        alpha: 0,
+                        total: 0
+                    };
+                }
+
+                // Count by status
+                const status = (record.status || '').toLowerCase();
+                if (status === 'hadir') {
+                    totalStats.hadir++;
+                    monthlyStats[bulanKey].hadir++;
+                } else if (status === 'sakit') {
+                    totalStats.sakit++;
+                    monthlyStats[bulanKey].sakit++;
+                } else if (status === 'izin') {
+                    totalStats.izin++;
+                    monthlyStats[bulanKey].izin++;
+                } else if (status === 'alpha') {
+                    totalStats.alpha++;
+                    monthlyStats[bulanKey].alpha++;
+                }
+
+                totalStats.total++;
+                monthlyStats[bulanKey].total++;
+            });
+        }
+
+        // Convert monthly stats to array, sorted by date (newest first)
+        const monthlyArray = Object.keys(monthlyStats)
+            .sort((a, b) => b.localeCompare(a))
+            .map(bulanKey => monthlyStats[bulanKey]);
+
+        return res.json({
+            message: 'Data statistik siswa berhasil diambil',
+            siswa: {
+                id: siswa.id,
+                nama: siswa.nama,
+                nis: siswa.nis,
+                rfid: siswa.rfid || ''
+            },
+            totalStats: totalStats,
+            monthlyStats: monthlyArray
+        });
+    } catch (error) {
+        console.error('Get student statistics error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
 // Send WhatsApp message via Fonnte API
 export const sendWhatsAppMessage = async (req, res) => {
     try {

@@ -187,24 +187,24 @@ export const login = async (req, res) => {
         }
 
         // Generate JWT token
-        const token = JWT.sign(
-            {
-                id: siswa.id,
-                nama: siswa.nama,
+    const token = JWT.sign(
+        {
+            id: siswa.id,
+            nama: siswa.nama,
                 nis: siswa.nis
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+    );
         
         return res.json({
-            message: 'Login berhasil',
-            token,
-            siswa,
+        message: 'Login berhasil',
+        token,
+        siswa,
             isAdmin: false,
             supabaseEmail: email, // Email for Supabase Auth
             supabaseSessionToken: supabaseSessionToken // Session token for frontend to set session
-        });
+    });
     } catch (error) {
         console.error('Login error:', error);
         return res.status(500).json({ message: 'Terjadi kesalahan pada server' });

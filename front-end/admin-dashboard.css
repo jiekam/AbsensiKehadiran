@@ -2500,3 +2500,321 @@ body {
     text-align: center;
 }
 
+/* ==================== STATISTIK SISWA STYLES ==================== */
+
+/* Statistik Page Header */
+.statistik-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+/* Student Cards Grid */
+.student-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+
+/* Student Card */
+.student-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.student-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+}
+
+.student-card-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+}
+
+.student-card-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+
+.student-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.student-card-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.student-card-nis {
+    font-size: 14px;
+    color: var(--text-light);
+    margin: 0;
+}
+
+.student-card-action {
+    color: var(--text-light);
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+
+.student-card:hover .student-card-action {
+    transform: translateX(4px);
+    color: var(--primary);
+}
+
+/* Modal Large */
+.modal-large {
+    max-width: 900px;
+    width: 90%;
+    max-height: 90vh;
+}
+
+/* Statistics Content */
+.statistics-content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.statistics-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.statistics-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+/* Statistics Total Grid */
+.statistics-total-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+}
+
+.statistics-total-card {
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.statistics-total-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.statistics-total-card.hadir {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.statistics-total-card.sakit {
+    border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.statistics-total-card.izin {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.statistics-total-card.alpha {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.statistics-total-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-light);
+    margin-bottom: 8px;
+}
+
+.statistics-total-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.statistics-total-percent {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+/* Statistics Monthly List */
+.statistics-monthly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.statistics-monthly-item {
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+}
+
+.statistics-monthly-item:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.statistics-monthly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.statistics-monthly-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.statistics-monthly-total {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+.statistics-monthly-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.statistics-monthly-detail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+.statistics-monthly-detail.hadir {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.statistics-monthly-detail.sakit {
+    border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.statistics-monthly-detail.izin {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.statistics-monthly-detail.alpha {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.detail-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+.detail-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.detail-percent {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-left: auto;
+}
+
+/* Scrollbar styling for monthly list */
+.statistics-monthly-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.statistics-monthly-list::-webkit-scrollbar-track {
+    background: var(--bg-light);
+    border-radius: 4px;
+}
+
+.statistics-monthly-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.statistics-monthly-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+}
+
+/* Light mode adjustments */
+:root .student-card,
+:root .statistics-total-card,
+:root .statistics-monthly-item {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+}
+
+:root .statistics-monthly-detail {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .student-card,
+[data-theme="dark"] .statistics-total-card,
+[data-theme="dark"] .statistics-monthly-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+[data-theme="dark"] .statistics-monthly-detail {
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+}
+

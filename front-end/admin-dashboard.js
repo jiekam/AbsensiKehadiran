@@ -200,6 +200,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (alatTab) {
         alatTab.addEventListener('click', () => switchPage('alat'));
     }
+    
+    const statistikSiswaTab = document.getElementById('statistikSiswaTab');
+    if (statistikSiswaTab) {
+        statistikSiswaTab.addEventListener('click', () => switchPage('statistik-siswa'));
+    }
 
     // Alat Status Toggle
     const alatStatusToggle = document.getElementById('alatStatusToggle');
@@ -281,6 +286,37 @@ window.addEventListener('DOMContentLoaded', async () => {
         selectAllCheckbox.addEventListener('change', (e) => {
             const checkboxes = document.querySelectorAll('#siswaTableBody input[type="checkbox"]');
             checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+    }
+
+    // Student Statistics Modal
+    const studentStatisticsModal = document.getElementById('studentStatisticsModal');
+    const closeStudentStatisticsModal = document.getElementById('closeStudentStatisticsModal');
+    const closeStudentStatisticsBtn = document.getElementById('closeStudentStatisticsBtn');
+    
+    if (closeStudentStatisticsModal) {
+        closeStudentStatisticsModal.addEventListener('click', hideStudentStatisticsModal);
+    }
+    if (closeStudentStatisticsBtn) {
+        closeStudentStatisticsBtn.addEventListener('click', hideStudentStatisticsModal);
+    }
+    if (studentStatisticsModal) {
+        studentStatisticsModal.addEventListener('click', (e) => {
+            if (e.target === studentStatisticsModal) {
+                hideStudentStatisticsModal();
+            }
+        });
+    }
+
+    // Refresh Statistik Button
+    const refreshStatistikBtn = document.getElementById('refreshStatistikBtn');
+    if (refreshStatistikBtn) {
+        refreshStatistikBtn.addEventListener('click', () => {
+            refreshStatistikBtn.classList.add('refreshing');
+            loadStatistikSiswa();
+            setTimeout(() => {
+                refreshStatistikBtn.classList.remove('refreshing');
+            }, 1000);
         });
     }
 });
@@ -666,20 +702,24 @@ function switchPage(page) {
     const manajemenSiswaTab = document.getElementById('manajemenSiswaTab');
     const historyTab = document.getElementById('historyTab');
     const alatTab = document.getElementById('alatTab');
+    const statistikSiswaTab = document.getElementById('statistikSiswaTab');
     const dashboardPage = document.getElementById('dashboardPage');
     const manajemenSiswaPage = document.getElementById('manajemenSiswaPage');
     const historyPage = document.getElementById('historyPage');
     const alatPage = document.getElementById('alatPage');
+    const statistikSiswaPage = document.getElementById('statistikSiswaPage');
 
     // Remove active class from all tabs and pages
     if (dashboardTab) dashboardTab.classList.remove('active');
     if (manajemenSiswaTab) manajemenSiswaTab.classList.remove('active');
     if (historyTab) historyTab.classList.remove('active');
     if (alatTab) alatTab.classList.remove('active');
+    if (statistikSiswaTab) statistikSiswaTab.classList.remove('active');
     if (dashboardPage) dashboardPage.classList.remove('active');
     if (manajemenSiswaPage) manajemenSiswaPage.classList.remove('active');
     if (historyPage) historyPage.classList.remove('active');
     if (alatPage) alatPage.classList.remove('active');
+    if (statistikSiswaPage) statistikSiswaPage.classList.remove('active');
 
     // Add active class to selected tab and page
     if (page === 'dashboard') {
@@ -723,6 +763,13 @@ function switchPage(page) {
         loadAlatStatus();
         // Initialize 3D when switching to this page
         initAlat3D();
+    } else if (page === 'statistik-siswa') {
+        const statistikSiswaTab = document.getElementById('statistikSiswaTab');
+        const statistikSiswaPage = document.getElementById('statistikSiswaPage');
+        if (statistikSiswaTab) statistikSiswaTab.classList.add('active');
+        if (statistikSiswaPage) statistikSiswaPage.classList.add('active');
+        // Load statistik data when switching to this page
+        loadStatistikSiswa();
     }
 }
 
@@ -1888,6 +1935,7 @@ function formatHistoryMessage(historyData) {
         'Alpha': historyData.filter(h => h.status === 'Alpha')
     };
 
+    const hadir = grouped['Hadir'].length;
     const sakit = grouped['Sakit'].length;
     const izin = grouped['Izin'].length;
     const alpha = grouped['Alpha'].length;
@@ -1896,7 +1944,9 @@ function formatHistoryMessage(historyData) {
     let message = `Absensi ${dateText}\n\n`;
 
     // Add statistics (only show if > 0)
+    // Hadir tetap dihitung dan ditampilkan di statistik
     const stats = [];
+    if (hadir > 0) stats.push(`Hadir: ${hadir}`);
     if (sakit > 0) stats.push(`Sakit: ${sakit}`);
     if (izin > 0) stats.push(`Izin: ${izin}`);
     if (alpha > 0) stats.push(`Alpha: ${alpha}`);
@@ -1906,12 +1956,11 @@ function formatHistoryMessage(historyData) {
     }
 
     // Add details (only for Sakit, Izin, Alpha - exclude Hadir)
+    // Hadir tidak ditampilkan detailnya, hanya di statistik
     const detailStatuses = ['Sakit', 'Izin', 'Alpha'];
-    let hasDetails = false;
     
     detailStatuses.forEach(status => {
         if (grouped[status].length > 0) {
-            hasDetails = true;
             message += `${status}:\n`;
             grouped[status].forEach(record => {
                 message += `${record.nama || 'N/A'}\n`;
@@ -2094,4 +2143,274 @@ async function sendWhatsAppMessage() {
         }
     }
 }
+
+// ==================== STATISTIK SISWA FUNCTIONS ====================
+
+// Load all students for statistics page
+async function loadStatistikSiswa() {
+    const loadingCell = document.getElementById('statistikLoadingCell');
+    const cardsGrid = document.getElementById('studentCardsGrid');
+
+    if (loadingCell) loadingCell.style.display = 'flex';
+    if (cardsGrid) cardsGrid.style.display = 'none';
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/siswa`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal mengambil data siswa' }));
+            throw new Error(errorData.message || 'Gagal mengambil data siswa');
+        }
+
+        const data = await response.json();
+        const siswaList = data.siswa || [];
+
+        renderStudentCards(siswaList);
+
+        if (loadingCell) loadingCell.style.display = 'none';
+        if (cardsGrid) cardsGrid.style.display = 'grid';
+    } catch (error) {
+        console.error('Error loading statistik siswa:', error);
+        if (loadingCell) {
+            loadingCell.innerHTML = `
+                <div style="text-align: center; color: var(--danger);">
+                    <p>${error.message || 'Gagal memuat data siswa'}</p>
+                    <button class="btn-primary" onclick="loadStatistikSiswa()" style="margin-top: 16px;">Coba Lagi</button>
+                </div>
+            `;
+        }
+    }
+}
+
+// Render student cards
+function renderStudentCards(siswaList) {
+    const cardsGrid = document.getElementById('studentCardsGrid');
+    if (!cardsGrid) return;
+
+    cardsGrid.innerHTML = '';
+
+    if (siswaList.length === 0) {
+        cardsGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-light);">
+                Tidak ada data siswa
+            </div>
+        `;
+        return;
+    }
+
+    siswaList.forEach(siswa => {
+        const card = document.createElement('div');
+        card.className = 'student-card';
+        card.dataset.nis = siswa.nis;
+        card.innerHTML = `
+            <div class="student-card-content">
+                <div class="student-card-avatar">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="student-card-info">
+                    <h4 class="student-card-name">${siswa.nama || 'N/A'}</h4>
+                    <p class="student-card-nis">NIS: ${siswa.nis || '-'}</p>
+                </div>
+                <div class="student-card-action">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+            </div>
+        `;
+
+        card.addEventListener('click', () => {
+            showStudentStatistics(siswa.nis, siswa.nama);
+        });
+
+        cardsGrid.appendChild(card);
+    });
+}
+
+// Show student statistics modal
+async function showStudentStatistics(nis, nama) {
+    const modal = document.getElementById('studentStatisticsModal');
+    const title = document.getElementById('studentStatisticsTitle');
+    const content = document.getElementById('studentStatisticsContent');
+
+    if (!modal || !title || !content) return;
+
+    // Set title
+    title.textContent = `Statistik ${nama || 'Siswa'}`;
+
+    // Show loading
+    content.innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div class="loading-boxes" style="display: inline-flex; gap: 8px; margin-bottom: 16px;">
+                <div class="loading-box"></div>
+                <div class="loading-box"></div>
+                <div class="loading-box"></div>
+            </div>
+            <p>Memuat data statistik...</p>
+        </div>
+    `;
+
+    modal.classList.add('show');
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/statistics/student/${nis}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal mengambil data statistik' }));
+            throw new Error(errorData.message || 'Gagal mengambil data statistik');
+        }
+
+        const data = await response.json();
+        renderStudentStatistics(data);
+    } catch (error) {
+        console.error('Error loading student statistics:', error);
+        content.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--danger);">
+                <p>${error.message || 'Gagal memuat data statistik'}</p>
+                <button class="btn-primary" onclick="showStudentStatistics('${nis}', '${nama}')" style="margin-top: 16px;">Coba Lagi</button>
+            </div>
+        `;
+    }
+}
+
+// Render student statistics
+function renderStudentStatistics(data) {
+    const content = document.getElementById('studentStatisticsContent');
+    if (!content) return;
+
+    const { siswa, totalStats, monthlyStats } = data;
+
+    // Calculate percentages
+    const total = totalStats.total || 1;
+    const hadirPercent = ((totalStats.hadir / total) * 100).toFixed(1);
+    const sakitPercent = ((totalStats.sakit / total) * 100).toFixed(1);
+    const izinPercent = ((totalStats.izin / total) * 100).toFixed(1);
+    const alphaPercent = ((totalStats.alpha / total) * 100).toFixed(1);
+
+    let html = `
+        <div class="statistics-section">
+            <h4 class="statistics-section-title">Total Kehadiran 1 Tahun</h4>
+            <div class="statistics-total-grid">
+                <div class="statistics-total-card">
+                    <div class="statistics-total-label">Total</div>
+                    <div class="statistics-total-value">${totalStats.total || 0}</div>
+                </div>
+                <div class="statistics-total-card hadir">
+                    <div class="statistics-total-label">Hadir</div>
+                    <div class="statistics-total-value">${totalStats.hadir || 0}</div>
+                    <div class="statistics-total-percent">${hadirPercent}%</div>
+                </div>
+                <div class="statistics-total-card sakit">
+                    <div class="statistics-total-label">Sakit</div>
+                    <div class="statistics-total-value">${totalStats.sakit || 0}</div>
+                    <div class="statistics-total-percent">${sakitPercent}%</div>
+                </div>
+                <div class="statistics-total-card izin">
+                    <div class="statistics-total-label">Izin</div>
+                    <div class="statistics-total-value">${totalStats.izin || 0}</div>
+                    <div class="statistics-total-percent">${izinPercent}%</div>
+                </div>
+                <div class="statistics-total-card alpha">
+                    <div class="statistics-total-label">Alpha</div>
+                    <div class="statistics-total-value">${totalStats.alpha || 0}</div>
+                    <div class="statistics-total-percent">${alphaPercent}%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="statistics-section">
+            <h4 class="statistics-section-title">Kehadiran Per Bulan</h4>
+            <div class="statistics-monthly-list">
+    `;
+
+    if (monthlyStats && monthlyStats.length > 0) {
+        monthlyStats.forEach(month => {
+            const monthTotal = month.total || 1;
+            const monthHadirPercent = ((month.hadir / monthTotal) * 100).toFixed(1);
+            const monthSakitPercent = ((month.sakit / monthTotal) * 100).toFixed(1);
+            const monthIzinPercent = ((month.izin / monthTotal) * 100).toFixed(1);
+            const monthAlphaPercent = ((month.alpha / monthTotal) * 100).toFixed(1);
+
+            html += `
+                <div class="statistics-monthly-item">
+                    <div class="statistics-monthly-header">
+                        <h5 class="statistics-monthly-title">${month.bulan}</h5>
+                        <span class="statistics-monthly-total">Total: ${month.total || 0}</span>
+                    </div>
+                    <div class="statistics-monthly-details">
+                        <div class="statistics-monthly-detail hadir">
+                            <span class="detail-label">Hadir:</span>
+                            <span class="detail-value">${month.hadir || 0}</span>
+                            <span class="detail-percent">(${monthHadirPercent}%)</span>
+                        </div>
+                        <div class="statistics-monthly-detail sakit">
+                            <span class="detail-label">Sakit:</span>
+                            <span class="detail-value">${month.sakit || 0}</span>
+                            <span class="detail-percent">(${monthSakitPercent}%)</span>
+                        </div>
+                        <div class="statistics-monthly-detail izin">
+                            <span class="detail-label">Izin:</span>
+                            <span class="detail-value">${month.izin || 0}</span>
+                            <span class="detail-percent">(${monthIzinPercent}%)</span>
+                        </div>
+                        <div class="statistics-monthly-detail alpha">
+                            <span class="detail-label">Alpha:</span>
+                            <span class="detail-value">${month.alpha || 0}</span>
+                            <span class="detail-percent">(${monthAlphaPercent}%)</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        html += `
+            <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                Tidak ada data kehadiran untuk periode ini
+            </div>
+        `;
+    }
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    content.innerHTML = html;
+}
+
+// Hide student statistics modal
+function hideStudentStatisticsModal() {
+    const modal = document.getElementById('studentStatisticsModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Make functions available globally
+window.loadStatistikSiswa = loadStatistikSiswa;
+window.showStudentStatistics = showStudentStatistics;
 
