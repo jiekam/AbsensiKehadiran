@@ -2144,7 +2144,9 @@ async function sendWhatsAppMessage() {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Gagal mengirim pesan' }));
-            throw new Error(errorData.message || errorData.error || 'Gagal mengirim pesan');
+            const errorMessage = errorData.error || errorData.message || 'Gagal mengirim pesan';
+            console.error('Backend error response:', errorData);
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();

@@ -1,5 +1,17 @@
 import { supabase } from '../config/supabase.js';
 
+// Helper function to get fetch - use global if available, otherwise import node-fetch
+async function getFetch() {
+    if (typeof fetch !== 'undefined') {
+        // Node.js 18+ has native fetch
+        return fetch;
+    } else {
+        // Fallback to node-fetch for older Node.js versions
+        const nodeFetch = await import('node-fetch');
+        return nodeFetch.default;
+    }
+}
+
 // Get all siswa data
 export const getAllSiswa = async (req, res) => {
     try {
@@ -559,35 +571,76 @@ export const sendWhatsAppMessage = async (req, res) => {
         }
 
         // Fonnte API endpoint
-        const fonnteUrl = 'https://md.fonnte.com/new/send.php';
-        const fonnteToken = process.env.FONNTE_API_TOKEN || 'BNYsSmJGant3AVKXZnCc';
+        const fonnteUrl = 'https://api.fonnte.com/send';
+        
+        // FIXED: Jangan pernah pakai fallback token di production!
+        const fonnteToken = process.env.FONNTE_API_TOKEN;
         
         if (!fonnteToken) {
-            return res.status(500).json({ message: 'Fonnte API token tidak dikonfigurasi' });
+            console.error('FATAL: FONNTE_API_TOKEN tidak ada di environment variables');
+            return res.status(500).json({ 
+                message: 'Fonnte API token tidak dikonfigurasi. Pastikan FONNTE_API_TOKEN ada di environment variables Railway.' 
+            });
         }
 
         // Send message via Fonnte API
-        // Try with form data format (common for PHP endpoints)
+        // According to Fonnte API documentation: https://api.fonnte.com/send
+        // - Authorization: TOKEN (in header)
+        // - Body: form data with 'target' and 'message'
         const formData = new URLSearchParams();
-        formData.append('token', fonnteToken);
         formData.append('target', finalPhone);
         formData.append('message', message);
         
-        const response = await fetch(fonnteUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: formData.toString()
-        });
+        console.log('Sending WhatsApp message to:', finalPhone);
+        console.log('Message length:', message.length);
+        console.log('Fonnte URL:', fonnteUrl);
+        console.log('Token exists:', !!fonnteToken);
+        console.log('Token length:', fonnteToken ? fonnteToken.length : 0);
+        
+        let response;
+        try {
+            const fetch = await getFetch();
+            response = await fetch(fonnteUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': fonnteToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData.toString()
+            });
+            console.log('Fetch completed. Status:', response.status, response.statusText);
+        } catch (fetchError) {
+            console.error('Fetch error:', fetchError);
+            console.error('Fetch error name:', fetchError.name);
+            console.error('Fetch error message:', fetchError.message);
+            console.error('Fetch error stack:', fetchError.stack);
+            throw new Error(`Gagal menghubungi Fonnte API: ${fetchError.message}`);
+        }
 
-        const responseData = await response.json();
+        // Try to parse response as JSON, but handle non-JSON responses
+        let responseData;
+        const responseText = await response.text();
+        
+        try {
+            responseData = JSON.parse(responseText);
+        } catch (parseError) {
+            // If response is not JSON, treat it as text
+            console.log('Fonnte API response (non-JSON):', responseText);
+            responseData = { 
+                status: response.ok ? 'success' : 'error',
+                message: responseText || 'Unknown response',
+                raw: responseText
+            };
+        }
 
-        if (!response.ok) {
+        console.log('Fonnte API response:', responseData);
+
+        // Check if Fonnte API returned an error
+        if (!response.ok || (responseData.status === false || responseData.status === 'false')) {
             console.error('Fonnte API error:', responseData);
             return res.status(response.status || 500).json({ 
                 message: 'Gagal mengirim pesan WhatsApp',
-                error: responseData.message || 'Unknown error'
+                error: responseData.reason || responseData.message || responseData.raw || 'Unknown error from Fonnte API'
             });
         }
 
@@ -597,7 +650,19 @@ export const sendWhatsAppMessage = async (req, res) => {
         });
     } catch (error) {
         console.error('Send WhatsApp message error:', error);
-        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+        console.error('Error stack:', error.stack);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        
+        // Return detailed error for debugging (in production, you might want to hide this)
+        return res.status(500).json({ 
+            message: 'Terjadi kesalahan pada server',
+            error: error.message || 'Unknown error',
+            details: process.env.NODE_ENV === 'development' ? {
+                name: error.name,
+                stack: error.stack
+            } : undefined
+        });
     }
 };
 
