@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction } from '../controllers/admin.controllers.js';
+import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction, getTodayRecap, sendWhatsAppMessage } from '../controllers/admin.controllers.js';
 import { authenticateToken, requireAdmin } from '../middlewares/auth.js';
 
 const router = Router();
@@ -15,6 +15,8 @@ router.delete('/history/:id', authenticateToken, requireAdmin, deleteHistory);
 router.get('/action', authenticateToken, requireAdmin, getActionToday);
 router.post('/action', authenticateToken, requireAdmin, createOrUpdateAction);
 router.put('/action', authenticateToken, requireAdmin, createOrUpdateAction);
+router.get('/recap/today', authenticateToken, requireAdmin, getTodayRecap);
+router.post('/whatsapp/send', authenticateToken, requireAdmin, sendWhatsAppMessage);
 
 export default router;
 

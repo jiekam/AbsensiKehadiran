@@ -492,3 +492,112 @@ export const createOrUpdateAction = async (req, res) => {
     }
 };
 
+// Get today's attendance recap
+export const getTodayRecap = async (req, res) => {
+    try {
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        // Get all history records for today
+        const { data: history, error: historyError } = await supabase
+            .from('history')
+            .select('id, waktu, tanggal, status, rfid, nis, nama, role')
+            .eq('tanggal', today)
+            .order('waktu', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching today recap:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data rekap absen' });
+        }
+
+        // Group by status
+        const recap = {
+            tanggal: today,
+            total: history?.length || 0,
+            hadir: history?.filter(h => h.status === 'Hadir').length || 0,
+            sakit: history?.filter(h => h.status === 'Sakit').length || 0,
+            izin: history?.filter(h => h.status === 'Izin').length || 0,
+            alpha: history?.filter(h => h.status === 'Alpha').length || 0,
+            details: history || []
+        };
+
+        return res.json({
+            message: 'Data rekap absen berhasil diambil',
+            recap: recap
+        });
+    } catch (error) {
+        console.error('Get today recap error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Send WhatsApp message via Fonnte API
+export const sendWhatsAppMessage = async (req, res) => {
+    try {
+        const { phone, message } = req.body;
+
+        if (!phone || !message) {
+            return res.status(400).json({ message: 'Nomor telepon dan pesan wajib diisi' });
+        }
+
+        // Format phone number (remove +, spaces, etc.)
+        const formattedPhone = phone.replace(/[^0-9]/g, '');
+        
+        // Ensure phone starts with country code (Indonesia: 62)
+        let finalPhone = formattedPhone;
+        if (!formattedPhone.startsWith('62')) {
+            // If starts with 0, replace with 62
+            if (formattedPhone.startsWith('0')) {
+                finalPhone = '62' + formattedPhone.substring(1);
+            } else {
+                finalPhone = '62' + formattedPhone;
+            }
+        }
+
+        // Fonnte API endpoint
+        const fonnteUrl = 'https://md.fonnte.com/new/send.php';
+        const fonnteToken = process.env.FONNTE_API_TOKEN || 'BNYsSmJGant3AVKXZnCc';
+        
+        if (!fonnteToken) {
+            return res.status(500).json({ message: 'Fonnte API token tidak dikonfigurasi' });
+        }
+
+        // Send message via Fonnte API
+        // Try with form data format (common for PHP endpoints)
+        const formData = new URLSearchParams();
+        formData.append('token', fonnteToken);
+        formData.append('target', finalPhone);
+        formData.append('message', message);
+        
+        const response = await fetch(fonnteUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData.toString()
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            console.error('Fonnte API error:', responseData);
+            return res.status(response.status || 500).json({ 
+                message: 'Gagal mengirim pesan WhatsApp',
+                error: responseData.message || 'Unknown error'
+            });
+        }
+
+        return res.json({
+            message: 'Pesan WhatsApp berhasil dikirim',
+            data: responseData
+        });
+    } catch (error) {
+        console.error('Send WhatsApp message error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+

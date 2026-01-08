@@ -17,17 +17,18 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use("/auth", authRoutes);
-app.use("/dashboard", dashboardRoutes);
-app.use("/api/admin", adminRoutes);
 
-// Config endpoint for frontend Supabase setup
+// Config endpoint for frontend Supabase setup (must be before /api/admin to avoid route conflicts)
 app.get("/api/config", (req, res) => {
   res.json({
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY
   });
 });
+
+app.use("/auth", authRoutes);
+app.use("/dashboard", dashboardRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend is running" });

@@ -127,6 +127,101 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Load admin data
     loadAdminData();
 
+    // Send History to WhatsApp Button - Use event delegation or attach after page load
+    // Wait a bit to ensure all elements are loaded
+    setTimeout(() => {
+        const sendHistoryWhatsAppBtn = document.getElementById('sendHistoryWhatsAppBtn');
+        if (sendHistoryWhatsAppBtn) {
+            console.log('Send WhatsApp button found, attaching event listener');
+            sendHistoryWhatsAppBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Send WhatsApp button clicked');
+                if (typeof showSendHistoryWhatsAppModal === 'function') {
+                    showSendHistoryWhatsAppModal();
+                } else {
+                    console.error('showSendHistoryWhatsAppModal is not defined');
+                    showToast('Fungsi tidak ditemukan. Silakan refresh halaman.', 'error');
+                }
+            });
+        } else {
+            console.warn('sendHistoryWhatsAppBtn not found');
+        }
+    }, 100);
+
+    // Send WhatsApp Modal
+    const sendWhatsAppModal = document.getElementById('sendWhatsAppModal');
+    const closeSendWhatsAppModal = document.getElementById('closeSendWhatsAppModal');
+    const cancelSendWhatsAppBtn = document.getElementById('cancelSendWhatsAppBtn');
+    const confirmSendWhatsAppBtn = document.getElementById('confirmSendWhatsAppBtn');
+    const whatsappPhoneInput = document.getElementById('whatsappPhoneInput');
+    const whatsappMessagePreview = document.getElementById('whatsappMessagePreview');
+
+    if (closeSendWhatsAppModal) {
+        closeSendWhatsAppModal.addEventListener('click', hideSendWhatsAppModal);
+    }
+    if (cancelSendWhatsAppBtn) {
+        cancelSendWhatsAppBtn.addEventListener('click', hideSendWhatsAppModal);
+    }
+    if (sendWhatsAppModal) {
+        sendWhatsAppModal.addEventListener('click', (e) => {
+            if (e.target === sendWhatsAppModal) {
+                hideSendWhatsAppModal();
+            }
+        });
+    }
+    if (confirmSendWhatsAppBtn) {
+        confirmSendWhatsAppBtn.addEventListener('click', sendWhatsAppMessage);
+    }
+    if (whatsappPhoneInput) {
+        whatsappPhoneInput.addEventListener('input', updateHistoryWhatsAppMessagePreview);
+    }
+
+    // WhatsApp phone select change handler
+    const whatsappPhoneSelect = document.getElementById('whatsappPhoneSelect');
+    if (whatsappPhoneSelect) {
+        whatsappPhoneSelect.addEventListener('change', (e) => {
+            const phoneInput = document.getElementById('whatsappPhoneInput');
+            if (e.target.value === 'manual') {
+                // Show manual input
+                if (phoneInput) {
+                    phoneInput.style.display = 'block';
+                    phoneInput.required = true;
+                    phoneInput.focus();
+                }
+            } else if (e.target.value) {
+                // Student selected - check if phone number exists
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                const phoneNumber = selectedOption.value;
+                
+                if (phoneNumber && phoneNumber.trim() !== '') {
+                    // Phone number exists, use it
+                    if (phoneInput) {
+                        phoneInput.value = phoneNumber;
+                        phoneInput.style.display = 'none';
+                        phoneInput.required = false;
+                    }
+                } else {
+                    // No phone number in database, show manual input
+                    showToast('Nomor WhatsApp siswa tidak tersedia di database. Silakan pilih "Input Manual" untuk memasukkan nomor secara manual.', 'error');
+                    e.target.value = 'manual';
+                    if (phoneInput) {
+                        phoneInput.style.display = 'block';
+                        phoneInput.required = true;
+                        phoneInput.focus();
+                    }
+                }
+            } else {
+                // Hide manual input
+                if (phoneInput) {
+                    phoneInput.style.display = 'none';
+                    phoneInput.required = false;
+                    phoneInput.value = '';
+                }
+            }
+        });
+    }
+
     // Tab Navigation
     const dashboardTab = document.getElementById('dashboardTab');
     const manajemenSiswaTab = document.getElementById('manajemenSiswaTab');
@@ -644,6 +739,27 @@ function switchPage(page) {
         if (historyPage) historyPage.classList.add('active');
         // Load history data when switching to this page
         loadHistoryData();
+        // Attach WhatsApp button event listener when switching to history page
+        setTimeout(() => {
+            const sendHistoryWhatsAppBtn = document.getElementById('sendHistoryWhatsAppBtn');
+            if (sendHistoryWhatsAppBtn) {
+                // Remove existing listeners by cloning the element
+                const newBtn = sendHistoryWhatsAppBtn.cloneNode(true);
+                sendHistoryWhatsAppBtn.parentNode.replaceChild(newBtn, sendHistoryWhatsAppBtn);
+                // Add new event listener
+                newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Send WhatsApp button clicked from history page');
+                    if (typeof showSendHistoryWhatsAppModal === 'function') {
+                        showSendHistoryWhatsAppModal();
+                    } else {
+                        console.error('showSendHistoryWhatsAppModal is not defined');
+                        showToast('Fungsi tidak ditemukan. Silakan refresh halaman.', 'error');
+                    }
+                });
+            }
+        }, 100);
     } else if (page === 'alat') {
         if (alatTab) alatTab.classList.add('active');
         if (alatPage) alatPage.classList.add('active');
@@ -1768,5 +1884,282 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeSupabaseForAlat);
 } else {
     initializeSupabaseForAlat();
+}
+
+// ==================== WHATSAPP FUNCTIONS ====================
+
+// Format history message for WhatsApp
+function formatHistoryMessage(historyData) {
+    if (!historyData || historyData.length === 0) {
+        return '📊 *REKAPITULASI ABSENSI*\n\nTidak ada data absensi untuk ditampilkan.';
+    }
+
+    // Get date from first record or current date
+    const datePicker = document.getElementById('historyDatePicker');
+    const selectedDate = datePicker ? datePicker.value : null;
+    
+    let dateText = '';
+    if (selectedDate) {
+        const date = new Date(selectedDate);
+        dateText = date.toLocaleDateString('id-ID', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+    } else {
+        dateText = 'Semua Tanggal';
+    }
+
+    // Group by status
+    const grouped = {
+        'Hadir': historyData.filter(h => h.status === 'Hadir'),
+        'Sakit': historyData.filter(h => h.status === 'Sakit'),
+        'Izin': historyData.filter(h => h.status === 'Izin'),
+        'Alpha': historyData.filter(h => h.status === 'Alpha')
+    };
+
+    const total = historyData.length;
+    const hadir = grouped['Hadir'].length;
+    const sakit = grouped['Sakit'].length;
+    const izin = grouped['Izin'].length;
+    const alpha = grouped['Alpha'].length;
+
+    let message = `📊 *REKAPITULASI ABSENSI*\n\n`;
+    message += `📅 ${dateText}\n\n`;
+    message += `📈 *Statistik:*\n`;
+    message += `✅ Hadir: ${hadir} siswa\n`;
+    message += `🤒 Sakit: ${sakit} siswa\n`;
+    message += `📝 Izin: ${izin} siswa\n`;
+    message += `❌ Alpha: ${alpha} siswa\n`;
+    message += `📊 Total: ${total} siswa\n\n`;
+
+    message += `📋 *Detail Absensi:*\n\n`;
+    
+    Object.keys(grouped).forEach(status => {
+        if (grouped[status].length > 0) {
+            message += `*${status}:*\n`;
+            grouped[status].forEach(record => {
+                message += `• ${record.nama || 'N/A'} (NIS: ${record.nis || 'N/A'})`;
+                if (record.waktu) {
+                    message += ` - ${record.waktu}`;
+                }
+                if (record.tanggal && !selectedDate) {
+                    message += ` [${record.tanggal}]`;
+                }
+                message += `\n`;
+            });
+            message += `\n`;
+        }
+    });
+
+    message += `\n_Generated by Sistem Absensi_`;
+
+    return message;
+}
+
+// Show send history WhatsApp modal
+async function showSendHistoryWhatsAppModal() {
+    console.log('showSendHistoryWhatsAppModal called');
+    const modal = document.getElementById('sendWhatsAppModal');
+    const phoneInput = document.getElementById('whatsappPhoneInput');
+    const phoneSelect = document.getElementById('whatsappPhoneSelect');
+    const preview = document.getElementById('whatsappMessagePreview');
+
+    console.log('Modal:', modal);
+    console.log('History data:', historyData);
+    console.log('History data length:', historyData ? historyData.length : 0);
+
+    if (!modal) {
+        console.error('Modal tidak ditemukan');
+        showToast('Modal tidak ditemukan', 'error');
+        return;
+    }
+
+    if (!historyData || historyData.length === 0) {
+        console.warn('Tidak ada data history');
+        showToast('Tidak ada data history untuk dikirim. Silakan muat data history terlebih dahulu.', 'error');
+        return;
+    }
+
+    // Reset form
+    if (phoneInput) {
+        phoneInput.value = '';
+        phoneInput.style.display = 'none';
+        phoneInput.required = false;
+    }
+    if (phoneSelect) {
+        phoneSelect.value = '';
+        // Load siswa list for phone selection
+        await loadSiswaForWhatsApp(phoneSelect);
+    }
+
+    updateHistoryWhatsAppMessagePreview();
+    
+    if (modal) {
+        modal.classList.add('show');
+        console.log('Modal opened successfully');
+    }
+}
+
+// Load siswa list for WhatsApp selection
+async function loadSiswaForWhatsApp(selectElement) {
+    if (!selectElement) return;
+
+    // Clear existing options except first two
+    selectElement.innerHTML = '<option value="">-- Pilih Nomor atau Input Manual --</option><option value="manual">📝 Input Manual</option>';
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/siswa`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Gagal mengambil data siswa');
+        }
+
+        const data = await response.json();
+        const siswaList = data.siswa || [];
+
+        // Add siswa to dropdown (for future: if phone number exists in database)
+        siswaList.forEach(siswa => {
+            const option = document.createElement('option');
+            // For now, no phone number in database, so we'll just show name
+            // If phone number exists later, use: option.value = siswa.phone || '';
+            option.value = ''; // Empty because no phone field yet
+            option.textContent = `${siswa.nama} (NIS: ${siswa.nis})`;
+            option.dataset.nama = siswa.nama;
+            option.dataset.nis = siswa.nis;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading siswa for WhatsApp:', error);
+        // Continue with manual input option
+    }
+}
+
+// Make function available globally for debugging
+window.showSendHistoryWhatsAppModal = showSendHistoryWhatsAppModal;
+
+// Hide send WhatsApp modal
+function hideSendWhatsAppModal() {
+    const modal = document.getElementById('sendWhatsAppModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Update WhatsApp message preview
+function updateHistoryWhatsAppMessagePreview() {
+    const preview = document.getElementById('whatsappMessagePreview');
+    if (!preview || !historyData || historyData.length === 0) return;
+
+    const message = formatHistoryMessage(historyData);
+    preview.textContent = message;
+}
+
+// Send WhatsApp message
+async function sendWhatsAppMessage() {
+    const phoneInput = document.getElementById('whatsappPhoneInput');
+    const phoneSelect = document.getElementById('whatsappPhoneSelect');
+    const confirmBtn = document.getElementById('confirmSendWhatsAppBtn');
+    
+    if (!phoneSelect || !historyData || historyData.length === 0) {
+        showToast('Data tidak lengkap', 'error');
+        return;
+    }
+
+    let phone = '';
+    const selectedValue = phoneSelect.value;
+
+    if (selectedValue === 'manual') {
+        // Use manual input
+        if (!phoneInput || !phoneInput.value.trim()) {
+            showToast('Nomor WhatsApp wajib diisi', 'error');
+            if (phoneInput) phoneInput.focus();
+            return;
+        }
+        phone = phoneInput.value.trim();
+    } else if (selectedValue) {
+        // Student selected - check if phone number exists
+        const selectedOption = phoneSelect.options[phoneSelect.selectedIndex];
+        const phoneNumber = selectedOption.value;
+        
+        if (phoneNumber && phoneNumber.trim() !== '') {
+            phone = phoneNumber.trim();
+        } else {
+            showToast('Nomor WhatsApp siswa tidak tersedia di database. Silakan pilih "Input Manual" untuk memasukkan nomor secara manual.', 'error');
+            return;
+        }
+    } else {
+        showToast('Pilih nomor WhatsApp atau pilih "Input Manual"', 'error');
+        return;
+    }
+
+    // Validate phone format
+    const phoneRegex = /^(\+?62|0)[0-9]{9,12}$/;
+    if (!phoneRegex.test(phone)) {
+        showToast('Format nomor telepon tidak valid. Format: 08xxxxxxxxxx atau 628xxxxxxxxxx', 'error');
+        if (phoneInput && phoneInput.style.display !== 'none') {
+            phoneInput.focus();
+        }
+        return;
+    }
+
+    // Disable button and show loading
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.querySelector('.button-text').textContent = 'Mengirim...';
+        confirmBtn.querySelector('.button-loader').style.display = 'flex';
+    }
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const message = formatHistoryMessage(historyData);
+
+        const response = await fetch(`${API_URL}/api/admin/whatsapp/send`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                phone: phone,
+                message: message
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal mengirim pesan' }));
+            throw new Error(errorData.message || errorData.error || 'Gagal mengirim pesan');
+        }
+
+        const data = await response.json();
+        showToast('Pesan WhatsApp berhasil dikirim', 'success');
+        hideSendWhatsAppModal();
+    } catch (error) {
+        console.error('Error sending WhatsApp message:', error);
+        showToast(error.message || 'Gagal mengirim pesan WhatsApp', 'error');
+    } finally {
+        // Re-enable button
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.querySelector('.button-text').textContent = 'Kirim Pesan';
+            confirmBtn.querySelector('.button-loader').style.display = 'none';
+        }
+    }
 }
 
