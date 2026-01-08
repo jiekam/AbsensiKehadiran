@@ -897,98 +897,102 @@ function renderAnalytics(analyticsArray, total) {
     // Store total data for modal
     window.analyticsTotalData = total;
 
-    // Total Summary Card
-    const hasSakit = (total.sakit || 0) > 0;
-    const hasIzin = (total.izin || 0) > 0;
-    const indicatorText = [];
-    const indicatorTooltip = [];
-    if (hasSakit) {
-        indicatorText.push('S');
-        indicatorTooltip.push('Sakit');
-    }
-    if (hasIzin) {
-        indicatorText.push('I');
-        indicatorTooltip.push('Izin');
-    }
-    
+    // Calculate percentages for total
+    const totalAbsen = total.absenTercatat || 0;
+    const totalAll = totalAbsen + (total.alpha || 0);
+    const hadirPercent = totalAll > 0 ? ((total.hadir || 0) / totalAll * 100).toFixed(1) : 0;
+    const sakitPercent = totalAll > 0 ? ((total.sakit || 0) / totalAll * 100).toFixed(1) : 0;
+    const izinPercent = totalAll > 0 ? ((total.izin || 0) / totalAll * 100).toFixed(1) : 0;
+    const alphaPercent = totalAll > 0 ? ((total.alpha || 0) / totalAll * 100).toFixed(1) : 0;
+
+    // Total Summary Section - Total card on top, then grid below
     html += `
-        <div class="analytics-total-card">
-            <h3 class="analytics-total-title">Total Semua Bulan</h3>
-            <div class="analytics-total-grid">
-                <div class="analytics-total-item clickable" onclick="showAnalyticsDetail('total')" title="Klik untuk melihat detail">
-                    <div class="clickable-header">
-                        <span class="analytics-total-label">Absen Tercatat</span>
-                        <svg class="click-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <span class="analytics-total-value absen-tercatat">${total.absenTercatat || 0}</span>
-                    ${indicatorText.length > 0 ? `
-                        <div class="analytics-indicator-wrapper">
-                            <div class="analytics-indicator" title="${indicatorTooltip.join(', ')}">
-                                ${indicatorText.join(' ')}
-                            </div>
-                            <span class="analytics-indicator-hint">Ada ${indicatorTooltip.join(' dan ')}</span>
-                        </div>
-                    ` : ''}
+        <div class="analytics-section">
+            <h4 class="analytics-section-title">Total Kehadiran 1 Tahun</h4>
+            <div class="analytics-total-container">
+                <div class="analytics-total-main-card">
+                    <div class="analytics-total-label">Total</div>
+                    <div class="analytics-total-value">${totalAll || 0}</div>
                 </div>
-                <div class="analytics-total-item">
-                    <span class="analytics-total-label">Total Alpha</span>
-                    <span class="analytics-total-value alpha">${total.alpha || 0}</span>
+                <div class="analytics-total-grid">
+                    <div class="analytics-total-card hadir clickable" onclick="showAnalyticsDetail('total')" title="Klik untuk melihat detail">
+                        <div class="analytics-total-label">Hadir</div>
+                        <div class="analytics-total-value">${total.hadir || 0}</div>
+                        <div class="analytics-total-percent">${hadirPercent}%</div>
+                    </div>
+                    <div class="analytics-total-card sakit clickable" onclick="showAnalyticsDetail('total')" title="Klik untuk melihat detail">
+                        <div class="analytics-total-label">Sakit</div>
+                        <div class="analytics-total-value">${total.sakit || 0}</div>
+                        <div class="analytics-total-percent">${sakitPercent}%</div>
+                    </div>
+                    <div class="analytics-total-card izin clickable" onclick="showAnalyticsDetail('total')" title="Klik untuk melihat detail">
+                        <div class="analytics-total-label">Izin</div>
+                        <div class="analytics-total-value">${total.izin || 0}</div>
+                        <div class="analytics-total-percent">${izinPercent}%</div>
+                    </div>
+                    <div class="analytics-total-card alpha">
+                        <div class="analytics-total-label">Alpha</div>
+                        <div class="analytics-total-value">${total.alpha || 0}</div>
+                        <div class="analytics-total-percent">${alphaPercent}%</div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
 
-    // Analytics Per Bulan
+    // Analytics Per Bulan - Simple and compact
+    html += `
+        <div class="analytics-section">
+            <h4 class="analytics-section-title">Kehadiran Per Bulan</h4>
+            <div class="analytics-monthly-list">
+    `;
+
     analyticsArray.forEach((monthData) => {
-        const monthHasSakit = (monthData.sakit || 0) > 0;
-        const monthHasIzin = (monthData.izin || 0) > 0;
-        const monthIndicatorText = [];
-        const monthIndicatorTooltip = [];
-        if (monthHasSakit) {
-            monthIndicatorText.push('S');
-            monthIndicatorTooltip.push('Sakit');
-        }
-        if (monthHasIzin) {
-            monthIndicatorText.push('I');
-            monthIndicatorTooltip.push('Izin');
-        }
+        const monthTotal = (monthData.absenTercatat || 0) + (monthData.alpha || 0);
+        const monthHadirPercent = monthTotal > 0 ? ((monthData.hadir || 0) / monthTotal * 100).toFixed(1) : 0;
+        const monthSakitPercent = monthTotal > 0 ? ((monthData.sakit || 0) / monthTotal * 100).toFixed(1) : 0;
+        const monthIzinPercent = monthTotal > 0 ? ((monthData.izin || 0) / monthTotal * 100).toFixed(1) : 0;
+        const monthAlphaPercent = monthTotal > 0 ? ((monthData.alpha || 0) / monthTotal * 100).toFixed(1) : 0;
+        
+        // Store month data for modal
+        window[`analyticsMonthData_${monthData.bulanKey}`] = monthData;
         
         html += `
-            <div class="analytics-month-section">
-                <div class="analytics-month-header">
-                    <h3 class="analytics-month-title">${monthData.bulan}</h3>
+            <div class="analytics-monthly-item">
+                <div class="analytics-monthly-header">
+                    <h5 class="analytics-monthly-title">${monthData.bulan}</h5>
+                    <span class="analytics-monthly-total">Total: ${monthTotal || 0}</span>
                 </div>
-                <div class="analytics-month-stats">
-                    <div class="analytics-stat-item clickable" onclick="showAnalyticsDetail('${monthData.bulanKey}')" title="Klik untuk melihat detail">
-                        <div class="clickable-header">
-                            <span class="analytics-stat-label">Absen Tercatat</span>
-                            <svg class="click-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </div>
-                        <span class="analytics-stat-value absen-tercatat">${monthData.absenTercatat || 0}</span>
-                        ${monthIndicatorText.length > 0 ? `
-                            <div class="analytics-indicator-wrapper">
-                                <div class="analytics-indicator" title="${monthIndicatorTooltip.join(', ')}">
-                                    ${monthIndicatorText.join(' ')}
-                                </div>
-                                <span class="analytics-indicator-hint">Ada ${monthIndicatorTooltip.join(' dan ')}</span>
-                            </div>
-                        ` : ''}
+                <div class="analytics-monthly-details">
+                    <div class="analytics-monthly-detail hadir clickable" onclick="showAnalyticsDetail('${monthData.bulanKey}')" title="Klik untuk melihat detail">
+                        <span class="detail-label">Hadir:</span>
+                        <span class="detail-value">${monthData.hadir || 0}</span>
+                        <span class="detail-percent">(${monthHadirPercent}%)</span>
                     </div>
-                    <div class="analytics-stat-item">
-                        <span class="analytics-stat-label">Alpha</span>
-                        <span class="analytics-stat-value alpha">${monthData.alpha || 0}</span>
+                    <div class="analytics-monthly-detail sakit clickable" onclick="showAnalyticsDetail('${monthData.bulanKey}')" title="Klik untuk melihat detail">
+                        <span class="detail-label">Sakit:</span>
+                        <span class="detail-value">${monthData.sakit || 0}</span>
+                        <span class="detail-percent">(${monthSakitPercent}%)</span>
+                    </div>
+                    <div class="analytics-monthly-detail izin clickable" onclick="showAnalyticsDetail('${monthData.bulanKey}')" title="Klik untuk melihat detail">
+                        <span class="detail-label">Izin:</span>
+                        <span class="detail-value">${monthData.izin || 0}</span>
+                        <span class="detail-percent">(${monthIzinPercent}%)</span>
+                    </div>
+                    <div class="analytics-monthly-detail alpha">
+                        <span class="detail-label">Alpha:</span>
+                        <span class="detail-value">${monthData.alpha || 0}</span>
+                        <span class="detail-percent">(${monthAlphaPercent}%)</span>
                     </div>
                 </div>
             </div>
         `;
-        
-        // Store month data for modal
-        window[`analyticsMonthData_${monthData.bulanKey}`] = monthData;
     });
+
+    html += `
+            </div>
+        </div>
+    `;
 
     analyticsContent.innerHTML = html;
 }
