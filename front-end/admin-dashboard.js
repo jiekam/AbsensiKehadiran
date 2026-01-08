@@ -25,31 +25,70 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // SECURITY: If isAdmin is not 'true', user is NOT authorized to access admin dashboard
-    // Even if they have admin role in database, they must login with isAdmin: true
-    // This prevents admin users from logging in as students and then accessing admin dashboard
+    // SECURITY LAYER 1: Check localStorage flag
+    // isAdmin flag is set ONLY when user logs in as admin with password
+    // This prevents admin users who login as students from accessing admin dashboard
     if (isAdmin !== 'true') {
-        // User is not authorized - redirect to their dashboard WITHOUT clearing localStorage
-        console.log('User is not authorized to access admin dashboard. Redirecting to dashboard...');
+        console.log('SECURITY: isAdmin flag is not set. User did not login as admin. Redirecting to dashboard...');
         window.location.href = 'dashboard.html';
         return;
     }
 
-    // Additional security: Verify token contains admin role in JWT payload
-    // Decode JWT token to check if it has role: 'admin'
+    // SECURITY LAYER 2: Verify JWT token contains role: 'admin' in payload
+    // JWT token for admin login has role: 'admin', while student login does NOT have role field
+    // This is the PRIMARY security check - even if localStorage is manipulated, JWT cannot be faked
     try {
         const tokenParts = token.split('.');
-        if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            // JWT token must have role: 'admin' to access admin dashboard
-            if (!payload.role || payload.role !== 'admin') {
-                console.log('JWT token does not contain admin role. Redirecting to dashboard...');
-                window.location.href = 'dashboard.html';
-                return;
+        if (tokenParts.length !== 3) {
+            console.error('SECURITY: Invalid JWT token format');
+            localStorage.clear();
+            window.location.href = 'index.html';
+            return;
+        }
+
+        const payload = JSON.parse(atob(tokenParts[1]));
+        
+        // JWT token MUST have role: 'admin' to access admin dashboard
+        // Admin users who login as students will NOT have role: 'admin' in their JWT token
+        if (!payload.role || payload.role !== 'admin') {
+            console.log('SECURITY: JWT token does not contain role: "admin". User logged in as student. Redirecting to dashboard...');
+            // Clear isAdmin flag if it was incorrectly set
+            localStorage.removeItem('isAdmin');
+            window.location.href = 'dashboard.html';
+            return;
+        }
+
+        // SECURITY LAYER 3: Verify with backend (optional but adds extra security)
+        // This ensures backend also validates the token
+        try {
+            const verifyResponse = await fetch(`${API_URL}/api/admin/siswa`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!verifyResponse.ok) {
+                if (verifyResponse.status === 403) {
+                    console.log('SECURITY: Backend rejected admin access. Redirecting to dashboard...');
+                    localStorage.removeItem('isAdmin');
+                    window.location.href = 'dashboard.html';
+                    return;
+                } else if (verifyResponse.status === 401) {
+                    console.log('SECURITY: Token invalid or expired. Redirecting to login...');
+                    localStorage.clear();
+                    window.location.href = 'index.html';
+                    return;
+                }
             }
+        } catch (verifyError) {
+            console.error('SECURITY: Error verifying with backend:', verifyError);
+            // On network error, still allow access if JWT is valid (fail open for UX)
+            // But log the error for monitoring
         }
     } catch (error) {
-        console.error('Error decoding JWT token:', error);
+        console.error('SECURITY: Error decoding JWT token:', error);
         // If we can't decode token, it's invalid - redirect to login
         localStorage.clear();
         window.location.href = 'index.html';

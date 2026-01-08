@@ -35,11 +35,22 @@ export const authenticateToken = (req, res, next) => {
 };
 
 // Middleware to check if user is admin
+// SECURITY: This checks BOTH JWT token role AND database role
+// JWT token MUST have role: 'admin' (set only when logging in as admin with password)
+// This prevents admin users who login as students from accessing admin endpoints
 export const requireAdmin = async (req, res, next) => {
     try {
+        // FIRST: Check JWT token payload for role: 'admin'
+        // This is the PRIMARY security check - JWT token role is set ONLY when logging in as admin
+        if (!req.user.role || req.user.role !== 'admin') {
+            return res.status(403).json({ 
+                message: 'Akses ditolak. Token tidak memiliki izin admin. Silakan login sebagai admin dengan password.' 
+            });
+        }
+
+        // SECOND: Verify user exists in database and has admin role (additional verification)
         const userId = req.user.id;
         
-        // Get user data from Supabase
         const { data: siswa, error } = await supabase
             .from('siswa_xirpl')
             .select('role')
@@ -51,7 +62,9 @@ export const requireAdmin = async (req, res, next) => {
         }
 
         if (!siswa.role || siswa.role.toLowerCase() !== 'admin') {
-            return res.status(403).json({ message: 'Akses ditolak. Hanya admin yang dapat mengakses fitur ini.' });
+            return res.status(403).json({ 
+                message: 'Akses ditolak. User tidak memiliki role admin di database.' 
+            });
         }
 
         next();

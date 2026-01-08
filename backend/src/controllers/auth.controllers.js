@@ -113,14 +113,8 @@ export const login = async (req, res) => {
         }
 
         // Regular student login (no password required)
-        // SECURITY: Prevent admin users from logging in as regular students
-        // Admin users MUST login with isAdmin: true and password
-        if (siswa.role && siswa.role.toLowerCase() === 'admin') {
-            return res.status(403).json({ 
-                message: 'User dengan role admin harus login melalui halaman admin dengan password' 
-            });
-        }
-
+        // NOTE: Admin users CAN login as students, but JWT token will NOT have role: 'admin'
+        // This prevents them from accessing admin dashboard even if they change URL
         // Check if JWT_SECRET is set
         if (!process.env.JWT_SECRET) {
             console.error('JWT_SECRET is not defined in environment variables');
