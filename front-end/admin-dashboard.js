@@ -25,46 +25,35 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // If token exists but isAdmin is not 'true', verify with backend
+    // SECURITY: If isAdmin is not 'true', user is NOT authorized to access admin dashboard
+    // Even if they have admin role in database, they must login with isAdmin: true
+    // This prevents admin users from logging in as students and then accessing admin dashboard
     if (isAdmin !== 'true') {
-        try {
-            // Verify token and check role from backend by trying to access admin endpoint
-            const response = await fetch(`${API_URL}/api/admin/siswa`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+        // User is not authorized - redirect to their dashboard WITHOUT clearing localStorage
+        console.log('User is not authorized to access admin dashboard. Redirecting to dashboard...');
+        window.location.href = 'dashboard.html';
+        return;
+    }
 
-            // If request succeeds (200), user is admin (requireAdmin middleware passed)
-            if (response.ok) {
-                // User is actually admin, update localStorage
-                localStorage.setItem('isAdmin', 'true');
-                // Continue with initialization below
-            } else if (response.status === 403) {
-                // User is not admin (403 Forbidden from requireAdmin middleware)
-                // Redirect to their dashboard WITHOUT clearing localStorage (don't logout)
-                console.log('User is not admin, redirecting to dashboard...');
-                window.location.href = 'dashboard.html';
-                return;
-            } else if (response.status === 401) {
-                // Token invalid or expired, redirect to login
-                localStorage.clear();
-                window.location.href = 'index.html';
-                return;
-            } else {
-                // Other error, redirect to dashboard as fallback (don't logout)
-                console.log('Error verifying admin access, redirecting to dashboard...');
+    // Additional security: Verify token contains admin role in JWT payload
+    // Decode JWT token to check if it has role: 'admin'
+    try {
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]));
+            // JWT token must have role: 'admin' to access admin dashboard
+            if (!payload.role || payload.role !== 'admin') {
+                console.log('JWT token does not contain admin role. Redirecting to dashboard...');
                 window.location.href = 'dashboard.html';
                 return;
             }
-        } catch (error) {
-            console.error('Error verifying admin access:', error);
-            // On network error, redirect to dashboard (don't logout)
-            window.location.href = 'dashboard.html';
-            return;
         }
+    } catch (error) {
+        console.error('Error decoding JWT token:', error);
+        // If we can't decode token, it's invalid - redirect to login
+        localStorage.clear();
+        window.location.href = 'index.html';
+        return;
     }
 
     // Initialize theme
