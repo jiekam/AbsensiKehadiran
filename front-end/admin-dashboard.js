@@ -14,15 +14,57 @@ function toggleTheme() {
 }
 
 // Check authentication
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('token');
     const isAdmin = localStorage.getItem('isAdmin');
 
-    if (!token || isAdmin !== 'true') {
-        // Not authenticated or not admin, redirect to login
+    // If no token at all, redirect to login
+    if (!token) {
         localStorage.clear();
         window.location.href = 'index.html';
         return;
+    }
+
+    // If token exists but isAdmin is not 'true', verify with backend
+    if (isAdmin !== 'true') {
+        try {
+            // Verify token and check role from backend by trying to access admin endpoint
+            const response = await fetch(`${API_URL}/api/admin/siswa`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            // If request succeeds (200), user is admin (requireAdmin middleware passed)
+            if (response.ok) {
+                // User is actually admin, update localStorage
+                localStorage.setItem('isAdmin', 'true');
+                // Continue with initialization below
+            } else if (response.status === 403) {
+                // User is not admin (403 Forbidden from requireAdmin middleware)
+                // Redirect to their dashboard WITHOUT clearing localStorage (don't logout)
+                console.log('User is not admin, redirecting to dashboard...');
+                window.location.href = 'dashboard.html';
+                return;
+            } else if (response.status === 401) {
+                // Token invalid or expired, redirect to login
+                localStorage.clear();
+                window.location.href = 'index.html';
+                return;
+            } else {
+                // Other error, redirect to dashboard as fallback (don't logout)
+                console.log('Error verifying admin access, redirecting to dashboard...');
+                window.location.href = 'dashboard.html';
+                return;
+            }
+        } catch (error) {
+            console.error('Error verifying admin access:', error);
+            // On network error, redirect to dashboard (don't logout)
+            window.location.href = 'dashboard.html';
+            return;
+        }
     }
 
     // Initialize theme
