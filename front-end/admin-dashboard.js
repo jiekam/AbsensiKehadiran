@@ -1,5 +1,48 @@
 const API_URL = 'https://absensikehadiran-production.up.railway.app';
 
+// Helper function to convert UTC time to WIB (UTC+7)
+function convertUTCToWIB(waktu) {
+    if (!waktu || waktu === '-') return '-';
+    
+    try {
+        // If waktu is in HH:MM:SS format (string from Supabase - stored as UTC)
+        if (typeof waktu === 'string' && waktu.match(/^\d{2}:\d{2}:\d{2}$/)) {
+            // Parse as UTC time and convert to WIB
+            const [hours, minutes, seconds] = waktu.split(':').map(Number);
+            
+            // Add 7 hours for WIB conversion (UTC+7)
+            let wibHours = hours + 7;
+            let wibMinutes = minutes;
+            let wibSeconds = seconds;
+            
+            // Handle hour overflow (if >= 24, subtract 24)
+            if (wibHours >= 24) {
+                wibHours = wibHours - 24;
+            }
+            
+            // Format as HH:MM:SS
+            return `${String(wibHours).padStart(2, '0')}:${String(wibMinutes).padStart(2, '0')}:${String(wibSeconds).padStart(2, '0')}`;
+        }
+        
+        // If waktu is a timestamp or Date object
+        const waktuDate = new Date(waktu);
+        if (!isNaN(waktuDate.getTime())) {
+            // Convert to WIB (UTC+7)
+            const wibDate = new Date(waktuDate.getTime() + (7 * 60 * 60 * 1000));
+            const wibHours = String(wibDate.getUTCHours()).padStart(2, '0');
+            const wibMinutes = String(wibDate.getUTCMinutes()).padStart(2, '0');
+            const wibSeconds = String(wibDate.getUTCSeconds()).padStart(2, '0');
+            return `${wibHours}:${wibMinutes}:${wibSeconds}`;
+        }
+        
+        // If parsing fails, return original
+        return waktu;
+    } catch (e) {
+        console.error('Error converting UTC to WIB:', e);
+        return waktu;
+    }
+}
+
 // Theme Management
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -533,13 +576,16 @@ function renderHistoryTable() {
         const statusUpper = (record.status || '').toUpperCase();
         const showKeterangan = statusUpper === 'SAKIT' || statusUpper === 'IZIN' || statusUpper === 'ALPHA';
         
+        // Convert waktu from UTC to WIB for modal
+        const waktuWIBForModal = convertUTCToWIB(record.waktu);
+        
         // Store record data in row for modal
         row.dataset.recordData = JSON.stringify({
             historyId: historyId,
             nama: record.nama || '-',
             nis: record.nis || '-',
             tanggal: record.tanggal || '-',
-            waktu: record.waktu || '-',
+            waktu: waktuWIBForModal,
             status: record.status || '-',
             keterangan: keterangan || null,
             showKeterangan: showKeterangan
@@ -551,8 +597,11 @@ function renderHistoryTable() {
             row.style.cursor = 'pointer';
         }
         
+        // Convert waktu from UTC to WIB
+        const waktuWIB = convertUTCToWIB(record.waktu);
+        
         row.innerHTML = `
-            <td>${record.waktu || '-'}</td>
+            <td>${waktuWIB}</td>
             <td>${displayId}</td>
             <td>${record.nama || '-'}</td>
             <td>${record.role || 'NULL'}</td>

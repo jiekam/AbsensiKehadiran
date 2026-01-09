@@ -1,5 +1,48 @@
 const API_URL = 'https://absensikehadiran-production.up.railway.app';
 
+// Helper function to convert UTC time to WIB (UTC+7)
+function convertUTCToWIB(waktu) {
+    if (!waktu || waktu === '-') return '-';
+    
+    try {
+        // If waktu is in HH:MM:SS format (string from Supabase - stored as UTC)
+        if (typeof waktu === 'string' && waktu.match(/^\d{2}:\d{2}:\d{2}$/)) {
+            // Parse as UTC time and convert to WIB
+            const [hours, minutes, seconds] = waktu.split(':').map(Number);
+            
+            // Add 7 hours for WIB conversion (UTC+7)
+            let wibHours = hours + 7;
+            let wibMinutes = minutes;
+            let wibSeconds = seconds;
+            
+            // Handle hour overflow (if >= 24, subtract 24)
+            if (wibHours >= 24) {
+                wibHours = wibHours - 24;
+            }
+            
+            // Format as HH:MM:SS
+            return `${String(wibHours).padStart(2, '0')}:${String(wibMinutes).padStart(2, '0')}:${String(wibSeconds).padStart(2, '0')}`;
+        }
+        
+        // If waktu is a timestamp or Date object
+        const waktuDate = new Date(waktu);
+        if (!isNaN(waktuDate.getTime())) {
+            // Convert to WIB (UTC+7)
+            const wibDate = new Date(waktuDate.getTime() + (7 * 60 * 60 * 1000));
+            const wibHours = String(wibDate.getUTCHours()).padStart(2, '0');
+            const wibMinutes = String(wibDate.getUTCMinutes()).padStart(2, '0');
+            const wibSeconds = String(wibDate.getUTCSeconds()).padStart(2, '0');
+            return `${wibHours}:${wibMinutes}:${wibSeconds}`;
+        }
+        
+        // If parsing fails, return original
+        return waktu;
+    } catch (e) {
+        console.error('Error converting UTC to WIB:', e);
+        return waktu;
+    }
+}
+
 // Check authentication
 const token = localStorage.getItem('token');
 const isAdmin = localStorage.getItem('isAdmin');
@@ -253,24 +296,13 @@ function renderAbsenStatus(status, waktu, hasRfid) {
     let subtitle = '';
     let statusClass = '';
     
-    // Format waktu jika ada
+    // Format waktu jika ada - convert from UTC to WIB
     let waktuText = '';
     if (waktu) {
-        try {
-            // Parse waktu (assuming format like HH:MM:SS or timestamp)
-            const waktuDate = new Date(waktu);
-            if (!isNaN(waktuDate.getTime())) {
-                waktuText = waktuDate.toLocaleTimeString('id-ID', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-            } else {
-                // If waktu is already in HH:MM:SS format
-                waktuText = waktu;
-            }
-        } catch (e) {
-            waktuText = waktu;
+        // Convert from UTC to WIB
+        const waktuWIB = convertUTCToWIB(waktu);
+        if (waktuWIB !== '-') {
+            waktuText = waktuWIB;
         }
     }
     
@@ -796,21 +828,8 @@ function renderHistory(historyArray) {
                 year: 'numeric'
             });
 
-            let waktuFormatted = record.waktu || '-';
-            if (waktuFormatted !== '-') {
-                try {
-                    const waktuDate = new Date(record.waktu);
-                    if (!isNaN(waktuDate.getTime())) {
-                        waktuFormatted = waktuDate.toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit'
-                        });
-                    }
-                } catch (e) {
-                    // Keep original format if parsing fails
-                }
-            }
+            // Convert waktu from UTC to WIB
+            const waktuFormatted = convertUTCToWIB(record.waktu);
 
             const statusLower = (record.status || '').toLowerCase();
             const statusClass = statusLower === 'hadir' ? 'hadir' : 
