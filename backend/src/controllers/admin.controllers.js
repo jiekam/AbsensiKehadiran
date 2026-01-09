@@ -141,7 +141,7 @@ export const getAllHistory = async (req, res) => {
         // Get all history records - include nama and role directly from history table
         let historyQuery = supabase
             .from('history')
-            .select('id, waktu, tanggal, status, rfid, nis, nama, role')
+            .select('id, waktu, tanggal, status, rfid, nis, nama, role, keterangan')
             .order('tanggal', { ascending: false })
             .order('waktu', { ascending: false });
 
@@ -161,6 +161,25 @@ export const getAllHistory = async (req, res) => {
         if (historyError) {
             console.error('Error fetching history:', historyError);
             return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Debug: Log history data to check keterangan column
+        console.log('History records fetched:', history?.length || 0);
+        if (history && history.length > 0) {
+            console.log('=== HISTORY DATA DEBUG ===');
+            history.forEach((record, idx) => {
+                if (['Sakit', 'Izin', 'Alpha'].includes(record.status)) {
+                    console.log(`Record ${idx + 1} (ID: ${record.id}):`, {
+                        status: record.status,
+                        keterangan: record.keterangan,
+                        keteranganType: typeof record.keterangan,
+                        keteranganIsNull: record.keterangan === null,
+                        keteranganIsUndefined: record.keterangan === undefined,
+                        keteranganLength: record.keterangan ? String(record.keterangan).length : 0
+                    });
+                }
+            });
+            console.log('=== END DEBUG ===');
         }
 
         if (!history || history.length === 0) {
@@ -196,6 +215,8 @@ export const getAllHistory = async (req, res) => {
         const transformedHistory = history.map(record => {
             const siswa = siswaMap[record.nis];
             
+            // Note: keterangan is already logged above in the raw history data
+            
             return {
                 id: siswa?.id || record.id, // Use siswa_id for display, fallback to history_id
                 history_id: record.id, // Keep history_id for update/delete operations
@@ -203,7 +224,7 @@ export const getAllHistory = async (req, res) => {
                 waktu: record.waktu,
                 tanggal: record.tanggal,
                 status: record.status,
-                keterangan: record.keterangan || null,
+                keterangan: record.keterangan ? String(record.keterangan).trim() : null, // Convert to string and trim, or null if empty
                 rfid: record.rfid,
                 nis: record.nis,
                 nama: record.nama || siswa?.nama || null,

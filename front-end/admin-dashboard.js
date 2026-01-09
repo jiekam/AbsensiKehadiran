@@ -364,6 +364,31 @@ async function loadHistoryData() {
         const data = await response.json();
         historyData = data.history || [];
 
+        // Debug: Check if keterangan is present in data
+        if (historyData.length > 0) {
+            console.log(`Total records: ${historyData.length}`);
+            // Log all records to see their structure
+            historyData.forEach((r, idx) => {
+                console.log(`Record ${idx + 1}:`, {
+                    id: r.history_id || r.id,
+                    status: r.status,
+                    keterangan: r.keterangan,
+                    keteranganType: typeof r.keterangan,
+                    hasKeterangan: !!r.keterangan,
+                    statusInList: ['Sakit', 'Izin', 'Alpha'].includes(r.status)
+                });
+            });
+            const recordsWithKeterangan = historyData.filter(r => {
+                const hasKeterangan = r.keterangan && r.keterangan !== null && r.keterangan !== '';
+                const statusMatch = ['Sakit', 'Izin', 'Alpha'].includes(r.status);
+                return hasKeterangan && statusMatch;
+            });
+            console.log(`Records with keterangan (filtered): ${recordsWithKeterangan.length}`);
+            if (recordsWithKeterangan.length > 0) {
+                console.log('Sample record with keterangan:', recordsWithKeterangan[0]);
+            }
+        }
+
         renderHistoryTable();
 
         if (loadingCell) loadingCell.style.display = 'none';
@@ -404,8 +429,9 @@ function renderHistoryTable() {
         // Use siswa_id (id) for display, history_id for operations
         const displayId = record.id || record.siswa_id || '-';
         const historyId = record.history_id || record.id; // Fallback to id if history_id not available
-        const keterangan = record.keterangan || '-';
-        const showKeterangan = ['Sakit', 'Izin', 'Alpha'].includes(record.status);
+        const keterangan = record.keterangan || null;
+        const statusUpper = (record.status || '').toUpperCase();
+        const showKeterangan = statusUpper === 'SAKIT' || statusUpper === 'IZIN' || statusUpper === 'ALPHA';
         
         row.innerHTML = `
             <td>${record.waktu || '-'}</td>
@@ -425,9 +451,9 @@ function renderHistoryTable() {
             </td>
             <td style="max-width: 200px; word-wrap: break-word; white-space: normal;">
                 ${showKeterangan ? `
-                    <div class="keterangan-cell" data-id="${historyId}" data-original-keterangan="${keterangan}">
-                        <span class="keterangan-text" title="Double-click untuk edit">${keterangan}</span>
-                        <input type="text" class="keterangan-input" value="${keterangan}" style="display: none;" />
+                    <div class="keterangan-cell" data-id="${historyId}" data-original-keterangan="${keterangan || ''}">
+                        <span class="keterangan-text" title="Double-click untuk edit keterangan">${keterangan && keterangan.trim() ? keterangan : '-'}</span>
+                        <input type="text" class="keterangan-input" value="${keterangan || ''}" placeholder="Masukkan keterangan" style="display: none;" />
                     </div>
                 ` : '-'}
             </td>
@@ -513,7 +539,8 @@ function renderHistoryTable() {
         // Save on Enter or blur
         const saveKeterangan = async () => {
             const newKeterangan = inputField.value.trim();
-            if (newKeterangan === originalKeterangan) {
+            const currentOriginal = cell.dataset.originalKeterangan || '';
+            if (newKeterangan === currentOriginal) {
                 // No change, just hide input
                 textSpan.style.display = 'inline';
                 inputField.style.display = 'none';
@@ -522,7 +549,7 @@ function renderHistoryTable() {
 
             if (!newKeterangan) {
                 alert('Keterangan tidak boleh kosong');
-                inputField.value = originalKeterangan;
+                inputField.value = currentOriginal;
                 textSpan.style.display = 'inline';
                 inputField.style.display = 'none';
                 return;
@@ -538,7 +565,8 @@ function renderHistoryTable() {
                 e.preventDefault();
                 saveKeterangan();
             } else if (e.key === 'Escape') {
-                inputField.value = originalKeterangan;
+                const currentOriginal = cell.dataset.originalKeterangan || '';
+                inputField.value = currentOriginal;
                 textSpan.style.display = 'inline';
                 inputField.style.display = 'none';
             }
