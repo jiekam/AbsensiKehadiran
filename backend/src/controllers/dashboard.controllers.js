@@ -29,6 +29,7 @@ export const getDashboard = async (req, res) => {
         const hasRfid = siswa.rfid && siswa.rfid.trim() !== '';
 
         // Get today's action records to check machine status
+        // NOTE: User/siswa cannot create action records - only admin can
         let { data: actions, error: actionError } = await supabase
             .from('action')
             .select('*')
@@ -39,30 +40,11 @@ export const getDashboard = async (req, res) => {
             return res.status(500).json({ message: 'Gagal mengambil data mesin' });
         }
 
-        // If no action record exists for today, create one with status "Active"
+        // If no action record exists for today, do NOT create one (only admin can create)
+        // User/siswa will see NonActive status if no record exists
         if (!actions || actions.length === 0) {
-            console.log(`No action record found for today (${today}), creating new record with status "Active"...`);
-            
-            const { data: newAction, error: createError } = await supabase
-                .from('action')
-                .insert({
-                    nama: 'absensi',
-                    tanggal: today,
-                    status: 'Active'
-                })
-                .select()
-                .single();
-
-            if (createError) {
-                console.error('Error creating action record:', createError);
-                // Don't fail the request, just log the error
-                // Continue with NonActive status
-                actions = [];
-            } else {
-                console.log('Successfully created action record for today:', newAction);
-                // Use the newly created action
-                actions = [newAction];
-            }
+            console.log(`No action record found for today (${today}). User/siswa cannot create action records.`);
+            actions = [];
         }
 
         // Check machine status: if there's an Active record for today, machine is Active

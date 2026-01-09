@@ -274,6 +274,100 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // Keterangan Detail Modal
+    const keteranganDetailModal = document.getElementById('keteranganDetailModal');
+    const closeKeteranganModal = document.getElementById('closeKeteranganModal');
+    const closeKeteranganBtn = document.getElementById('closeKeteranganBtn');
+
+    if (closeKeteranganModal) {
+        closeKeteranganModal.addEventListener('click', hideKeteranganDetailModal);
+    }
+    if (closeKeteranganBtn) {
+        closeKeteranganBtn.addEventListener('click', hideKeteranganDetailModal);
+    }
+    if (keteranganDetailModal) {
+        keteranganDetailModal.addEventListener('click', (e) => {
+            if (e.target === keteranganDetailModal) {
+                hideKeteranganDetailModal();
+            }
+        });
+    }
+
+    // Edit Keterangan functionality
+    const editKeteranganToggleBtn = document.getElementById('editKeteranganToggleBtn');
+    const editKeteranganBtn = document.getElementById('editKeteranganBtn');
+    const saveKeteranganBtn = document.getElementById('saveKeteranganBtn');
+
+    // Edit Keterangan Toggle
+    if (editKeteranganToggleBtn) {
+        editKeteranganToggleBtn.addEventListener('click', () => {
+            const keteranganText = document.getElementById('keteranganDetailText');
+            const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+            
+            keteranganText.style.display = 'none';
+            keteranganTextarea.style.display = 'block';
+            keteranganTextarea.focus();
+            keteranganTextarea.select();
+            
+            editKeteranganToggleBtn.style.display = 'none';
+            editKeteranganBtn.style.display = 'block';
+            saveKeteranganBtn.style.display = 'block';
+        });
+    }
+
+    // Cancel Edit
+    if (editKeteranganBtn) {
+        editKeteranganBtn.addEventListener('click', () => {
+            const modal = keteranganDetailModal;
+            const originalKeterangan = modal.dataset.originalKeterangan || '';
+            const keteranganText = document.getElementById('keteranganDetailText');
+            const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+            
+            // Revert to original
+            keteranganTextarea.value = originalKeterangan;
+            
+            keteranganText.style.display = 'block';
+            keteranganTextarea.style.display = 'none';
+            
+            editKeteranganToggleBtn.style.display = 'block';
+            editKeteranganBtn.style.display = 'none';
+            saveKeteranganBtn.style.display = 'none';
+        });
+    }
+
+    // Save Keterangan
+    if (saveKeteranganBtn) {
+        saveKeteranganBtn.addEventListener('click', async () => {
+            const modal = keteranganDetailModal;
+            const historyId = modal.dataset.historyId;
+            const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+            const newKeterangan = keteranganTextarea.value.trim();
+
+            if (!historyId) {
+                alert('ID history tidak ditemukan');
+                return;
+            }
+
+            if (!newKeterangan) {
+                alert('Keterangan tidak boleh kosong');
+                return;
+            }
+
+            // Disable button during save
+            saveKeteranganBtn.disabled = true;
+            saveKeteranganBtn.textContent = 'Menyimpan...';
+
+            try {
+                await updateKeteranganFromModal(historyId, newKeterangan);
+            } catch (error) {
+                console.error('Error saving keterangan:', error);
+            } finally {
+                saveKeteranganBtn.disabled = false;
+                saveKeteranganBtn.textContent = 'Simpan';
+            }
+        });
+    }
+
     // Save button
     const saveEditBtn = document.getElementById('saveEditBtn');
     if (saveEditBtn) {
@@ -416,7 +510,7 @@ function renderHistoryTable() {
     if (historyData.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="10" style="text-align: center; padding: 40px; color: var(--text-light);">
+                <td colspan="9" style="text-align: center; padding: 40px; color: var(--text-light);">
                     Tidak ada data history untuk tanggal yang dipilih
                 </td>
             </tr>
@@ -429,9 +523,33 @@ function renderHistoryTable() {
         // Use siswa_id (id) for display, history_id for operations
         const displayId = record.id || record.siswa_id || '-';
         const historyId = record.history_id || record.id; // Fallback to id if history_id not available
-        const keterangan = record.keterangan || null;
+        // Get keterangan - handle null, undefined, or empty string
+        let keterangan = null;
+        if (record.keterangan !== null && record.keterangan !== undefined && record.keterangan !== '') {
+            keterangan = String(record.keterangan).trim();
+            if (keterangan === '') keterangan = null;
+        }
+        
         const statusUpper = (record.status || '').toUpperCase();
         const showKeterangan = statusUpper === 'SAKIT' || statusUpper === 'IZIN' || statusUpper === 'ALPHA';
+        
+        // Store record data in row for modal
+        row.dataset.recordData = JSON.stringify({
+            historyId: historyId,
+            nama: record.nama || '-',
+            nis: record.nis || '-',
+            tanggal: record.tanggal || '-',
+            waktu: record.waktu || '-',
+            status: record.status || '-',
+            keterangan: keterangan || null,
+            showKeterangan: showKeterangan
+        });
+        
+        // Add clickable class if has keterangan
+        if (showKeterangan) {
+            row.classList.add('history-row-clickable');
+            row.style.cursor = 'pointer';
+        }
         
         row.innerHTML = `
             <td>${record.waktu || '-'}</td>
@@ -448,14 +566,6 @@ function renderHistoryTable() {
                     <option value="Izin" ${record.status === 'Izin' ? 'selected' : ''}>Izin</option>
                     <option value="Alpha" ${record.status === 'Alpha' ? 'selected' : ''}>Alpha</option>
                 </select>
-            </td>
-            <td style="max-width: 200px; word-wrap: break-word; white-space: normal;">
-                ${showKeterangan ? `
-                    <div class="keterangan-cell" data-id="${historyId}" data-original-keterangan="${keterangan || ''}">
-                        <span class="keterangan-text" title="Double-click untuk edit keterangan">${keterangan && keterangan.trim() ? keterangan : '-'}</span>
-                        <input type="text" class="keterangan-input" value="${keterangan || ''}" placeholder="Masukkan keterangan" style="display: none;" />
-                    </div>
-                ` : '-'}
             </td>
             <td>
                 <button class="btn-delete" data-id="${historyId}" title="Hapus">
@@ -513,6 +623,7 @@ function renderHistoryTable() {
     const deleteButtons = tableBody.querySelectorAll('.btn-delete');
     deleteButtons.forEach(btn => {
         btn.addEventListener('click', async (e) => {
+            e.stopPropagation(); // Prevent row click
             const historyId = e.target.closest('.btn-delete').dataset.id;
             if (confirm('Apakah Anda yakin ingin menghapus data ini?')) {
                 await deleteHistoryRecord(historyId);
@@ -520,61 +631,165 @@ function renderHistoryTable() {
         });
     });
 
-    // Add event listeners for keterangan edit
-    const keteranganCells = tableBody.querySelectorAll('.keterangan-cell');
-    keteranganCells.forEach(cell => {
-        const textSpan = cell.querySelector('.keterangan-text');
-        const inputField = cell.querySelector('.keterangan-input');
-        const historyId = cell.dataset.id;
-        const originalKeterangan = cell.dataset.originalKeterangan;
-
-        // Double-click to edit
-        textSpan.addEventListener('dblclick', () => {
-            textSpan.style.display = 'none';
-            inputField.style.display = 'block';
-            inputField.focus();
-            inputField.select();
-        });
-
-        // Save on Enter or blur
-        const saveKeterangan = async () => {
-            const newKeterangan = inputField.value.trim();
-            const currentOriginal = cell.dataset.originalKeterangan || '';
-            if (newKeterangan === currentOriginal) {
-                // No change, just hide input
-                textSpan.style.display = 'inline';
-                inputField.style.display = 'none';
+    // Add event listeners for row click to show keterangan detail
+    const clickableRows = tableBody.querySelectorAll('.history-row-clickable');
+    clickableRows.forEach(row => {
+        row.addEventListener('click', (e) => {
+            // Don't trigger if clicking on select or button
+            if (e.target.closest('.status-select') || e.target.closest('.btn-delete')) {
                 return;
             }
-
-            if (!newKeterangan) {
-                alert('Keterangan tidak boleh kosong');
-                inputField.value = currentOriginal;
-                textSpan.style.display = 'inline';
-                inputField.style.display = 'none';
-                return;
-            }
-
-            // Update keterangan
-            await updateKeterangan(historyId, newKeterangan, cell, textSpan, inputField);
-        };
-
-        inputField.addEventListener('blur', saveKeterangan);
-        inputField.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                saveKeterangan();
-            } else if (e.key === 'Escape') {
-                const currentOriginal = cell.dataset.originalKeterangan || '';
-                inputField.value = currentOriginal;
-                textSpan.style.display = 'inline';
-                inputField.style.display = 'none';
-            }
+            
+            const recordData = JSON.parse(row.dataset.recordData);
+            showKeteranganDetailModal(recordData);
         });
     });
 }
 
-// Update Keterangan
+// Show Keterangan Detail Modal
+function showKeteranganDetailModal(recordData) {
+    const modal = document.getElementById('keteranganDetailModal');
+    if (!modal) return;
+
+    // Store record data in modal for editing
+    modal.dataset.historyId = recordData.historyId;
+    modal.dataset.originalKeterangan = recordData.keterangan || '';
+
+    // Populate modal with data
+    document.getElementById('keteranganDetailNama').textContent = recordData.nama || '-';
+    document.getElementById('keteranganDetailNis').textContent = recordData.nis || '-';
+    document.getElementById('keteranganDetailTanggal').textContent = recordData.tanggal || '-';
+    document.getElementById('keteranganDetailWaktu').textContent = recordData.waktu || '-';
+    
+    // Status with badge
+    const statusElement = document.getElementById('keteranganDetailStatus');
+    const statusLower = (recordData.status || '').toLowerCase();
+    const statusClass = statusLower === 'hadir' ? 'hadir' : 
+                      statusLower === 'sakit' ? 'sakit' : 
+                      statusLower === 'izin' ? 'izin' : 
+                      statusLower === 'alpha' ? 'alpha' : '';
+    statusElement.innerHTML = `<span class="status-badge ${statusClass}">${recordData.status || '-'}</span>`;
+    
+    // Keterangan - show text view
+    const keteranganText = document.getElementById('keteranganDetailText');
+    const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+    
+    if (recordData.keterangan && recordData.keterangan.trim()) {
+        keteranganText.textContent = recordData.keterangan;
+        keteranganText.style.color = 'var(--text)';
+        keteranganText.style.fontStyle = 'normal';
+        keteranganTextarea.value = recordData.keterangan;
+    } else {
+        keteranganText.textContent = 'Tidak ada keterangan';
+        keteranganText.style.color = 'var(--text-light)';
+        keteranganText.style.fontStyle = 'italic';
+        keteranganTextarea.value = '';
+    }
+
+    // Reset edit mode
+    keteranganText.style.display = 'block';
+    keteranganTextarea.style.display = 'none';
+    document.getElementById('editKeteranganToggleBtn').style.display = 'block';
+    document.getElementById('editKeteranganBtn').style.display = 'none';
+    document.getElementById('saveKeteranganBtn').style.display = 'none';
+
+    // Show modal
+    modal.style.display = 'flex';
+}
+
+// Hide Keterangan Detail Modal
+function hideKeteranganDetailModal() {
+    const modal = document.getElementById('keteranganDetailModal');
+    if (modal) {
+        modal.style.display = 'none';
+        // Reset edit mode
+        const keteranganText = document.getElementById('keteranganDetailText');
+        const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+        const editKeteranganToggleBtn = document.getElementById('editKeteranganToggleBtn');
+        const editKeteranganBtn = document.getElementById('editKeteranganBtn');
+        const saveKeteranganBtn = document.getElementById('saveKeteranganBtn');
+        
+        if (keteranganText) keteranganText.style.display = 'block';
+        if (keteranganTextarea) keteranganTextarea.style.display = 'none';
+        if (editKeteranganToggleBtn) editKeteranganToggleBtn.style.display = 'block';
+        if (editKeteranganBtn) editKeteranganBtn.style.display = 'none';
+        if (saveKeteranganBtn) saveKeteranganBtn.style.display = 'none';
+    }
+}
+
+// Update Keterangan from Modal
+async function updateKeteranganFromModal(historyId, newKeterangan) {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        // Get current status from the row
+        const tableBody = document.getElementById('historyTableBody');
+        const row = tableBody.querySelector(`tr[data-record-data*='"historyId":"${historyId}"']`);
+        let currentStatus = '';
+        
+        if (row) {
+            const statusSelect = row.querySelector('.status-select');
+            currentStatus = statusSelect ? statusSelect.value : '';
+        } else {
+            // Try to get from modal data or historyData
+            const record = historyData.find(r => (r.history_id || r.id) == historyId);
+            currentStatus = record ? record.status : '';
+        }
+
+        // Validate that status requires keterangan
+        if (!['Sakit', 'Izin', 'Alpha'].includes(currentStatus)) {
+            throw new Error('Keterangan hanya dapat diubah untuk status Sakit, Izin, atau Alpha');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/history/${historyId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                status: currentStatus,
+                keterangan: newKeterangan 
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal memperbarui keterangan' }));
+            throw new Error(errorData.message || 'Gagal memperbarui keterangan');
+        }
+
+        // Update modal display
+        const keteranganText = document.getElementById('keteranganDetailText');
+        const keteranganTextarea = document.getElementById('keteranganDetailTextarea');
+        const modal = document.getElementById('keteranganDetailModal');
+        
+        keteranganText.textContent = newKeterangan;
+        keteranganText.style.color = 'var(--text)';
+        keteranganText.style.fontStyle = 'normal';
+        modal.dataset.originalKeterangan = newKeterangan;
+        
+        // Exit edit mode
+        keteranganText.style.display = 'block';
+        keteranganTextarea.style.display = 'none';
+        document.getElementById('editKeteranganToggleBtn').style.display = 'block';
+        document.getElementById('editKeteranganBtn').style.display = 'none';
+        document.getElementById('saveKeteranganBtn').style.display = 'none';
+        
+        showToast('Keterangan berhasil diperbarui', 'success');
+        
+        // Reload history data to ensure sync
+        await loadHistoryData();
+    } catch (error) {
+        console.error('Error updating keterangan:', error);
+        showToast(error.message || 'Gagal memperbarui keterangan', 'error');
+        throw error;
+    }
+}
+
+// Update Keterangan (kept for backward compatibility, but not used in table anymore)
 async function updateKeterangan(historyId, newKeterangan, cellElement, textSpan, inputField) {
     try {
         const token = localStorage.getItem('token');
@@ -1476,27 +1691,27 @@ function updateAlatUI() {
     }
 
     if (!alatStatusData) {
-        // No data for today, create new one with Active status
+        // No data for today, create new one with NonActive status (default)
         if (alatStatusValue) {
-            alatStatusValue.textContent = 'Active';
-            alatStatusValue.className = 'alat-status-value active';
+            alatStatusValue.textContent = 'NonActive';
+            alatStatusValue.className = 'alat-status-value inactive';
         }
         if (alatStatusToggle) {
-            alatStatusToggle.checked = true;
+            alatStatusToggle.checked = false;
         }
         if (alatInfoText) {
-            alatInfoText.textContent = 'Data untuk hari ini belum ada, akan dibuat dengan status Active';
+            alatInfoText.textContent = 'Data untuk hari ini belum ada, akan dibuat dengan status NonActive';
         }
         if (alatStatusIcon) {
             alatStatusIcon.innerHTML = `
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M10 14L12 12M12 12L14 10M12 12L10 10M12 12L14 14M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             `;
-            alatStatusIcon.className = 'alat-status-icon active';
+            alatStatusIcon.className = 'alat-status-icon inactive';
         }
         // Update 3D LED
-        updateAlatLED(true);
+        updateAlatLED(false);
         // Auto create data
         createAlatAction();
         return;
@@ -1562,7 +1777,7 @@ async function createAlatAction() {
             },
             body: JSON.stringify({ 
                 nama: 'absensi',
-                status: 'Active'
+                status: 'NonActive'
             })
         });
 

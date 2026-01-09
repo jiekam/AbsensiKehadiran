@@ -215,7 +215,12 @@ export const getAllHistory = async (req, res) => {
         const transformedHistory = history.map(record => {
             const siswa = siswaMap[record.nis];
             
-            // Note: keterangan is already logged above in the raw history data
+            // Process keterangan - handle null, undefined, or empty string
+            let keteranganValue = null;
+            if (record.keterangan !== null && record.keterangan !== undefined) {
+                const trimmed = String(record.keterangan).trim();
+                keteranganValue = trimmed !== '' ? trimmed : null;
+            }
             
             return {
                 id: siswa?.id || record.id, // Use siswa_id for display, fallback to history_id
@@ -224,13 +229,27 @@ export const getAllHistory = async (req, res) => {
                 waktu: record.waktu,
                 tanggal: record.tanggal,
                 status: record.status,
-                keterangan: record.keterangan ? String(record.keterangan).trim() : null, // Convert to string and trim, or null if empty
+                keterangan: keteranganValue, // Can be string or null
                 rfid: record.rfid,
                 nis: record.nis,
                 nama: record.nama || siswa?.nama || null,
                 role: record.role || siswa?.role || null
             };
         });
+        
+        // Debug: Log transformed data
+        console.log('=== TRANSFORMED HISTORY DATA ===');
+        transformedHistory.forEach((record, idx) => {
+            if (['Sakit', 'Izin', 'Alpha'].includes(record.status)) {
+                console.log(`Transformed Record ${idx + 1}:`, {
+                    history_id: record.history_id,
+                    status: record.status,
+                    keterangan: record.keterangan,
+                    keteranganType: typeof record.keterangan
+                });
+            }
+        });
+        console.log('=== END TRANSFORMED DATA ===');
 
         return res.json({
             message: 'Data history berhasil diambil',
@@ -468,16 +487,16 @@ export const getActionToday = async (req, res) => {
             return res.status(500).json({ message: 'Gagal mengambil data action' });
         }
 
-        // If no action record exists for today, create one with status "Active"
+        // If no action record exists for today, create one with status "NonActive" (default)
         if (!action) {
-            console.log(`No action record found for today (${today}), creating new record with status "Active"...`);
+            console.log(`No action record found for today (${today}), creating new record with status "NonActive"...`);
             
             const { data: newAction, error: createError } = await supabase
                 .from('action')
                 .insert({
                     nama: 'absensi',
                     tanggal: today,
-                    status: 'Active'
+                    status: 'NonActive'
                 })
                 .select()
                 .single();
