@@ -297,10 +297,20 @@ export const updateHistoryStatus = async (req, res) => {
         if (keterangan !== undefined) {
             // Keterangan hanya diperlukan untuk Sakit, Izin, dan Alpha
             if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
-                if (!keterangan || keterangan.trim() === '') {
-                    return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                if (newStatus === 'Alpha') {
+                    // For Alpha, if empty, set default "Tidak Ada Keterangan"
+                    if (!keterangan || keterangan.trim() === '') {
+                        updateData.keterangan = 'Tidak Ada Keterangan';
+                    } else {
+                        updateData.keterangan = keterangan.trim();
+                    }
+                } else {
+                    // For Sakit and Izin, keterangan is required
+                    if (!keterangan || keterangan.trim() === '') {
+                        return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                    }
+                    updateData.keterangan = keterangan.trim();
                 }
-                updateData.keterangan = keterangan.trim();
             } else {
                 // For Hadir, set keterangan to null
                 updateData.keterangan = null;
@@ -315,10 +325,22 @@ export const updateHistoryStatus = async (req, res) => {
                     .eq('id', id)
                     .single();
                 
-                if (!existingRecord?.keterangan) {
-                    return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                if (newStatus === 'Alpha') {
+                    // For Alpha, if no existing keterangan, set default
+                    if (!existingRecord?.keterangan || existingRecord.keterangan.trim() === '') {
+                        updateData.keterangan = 'Tidak Ada Keterangan';
+                    } else {
+                        // Keep existing keterangan if available
+                        updateData.keterangan = existingRecord.keterangan;
+                    }
+                } else {
+                    // For Sakit and Izin, keterangan is required
+                    if (!existingRecord?.keterangan || existingRecord.keterangan.trim() === '') {
+                        return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                    }
+                    // Keep existing keterangan if available
+                    updateData.keterangan = existingRecord.keterangan;
                 }
-                // Keep existing keterangan if available
             } else {
                 // Changing to Hadir, clear keterangan
                 updateData.keterangan = null;
@@ -381,9 +403,21 @@ export const createHistory = async (req, res) => {
             return res.status(400).json({ message: 'Status tidak valid' });
         }
 
-        // Keterangan hanya diperlukan untuk Sakit, Izin, dan Alpha
-        if (['Sakit', 'Izin', 'Alpha'].includes(status) && !keterangan) {
-            return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + status });
+        // Keterangan validation
+        // For Alpha, keterangan is optional - if empty, set default "Tidak Ada Keterangan"
+        // For Sakit and Izin, keterangan is required
+        let finalKeterangan = keterangan;
+        if (status === 'Alpha') {
+            if (!keterangan || keterangan.trim() === '') {
+                finalKeterangan = 'Tidak Ada Keterangan';
+            } else {
+                finalKeterangan = keterangan.trim();
+            }
+        } else if (['Sakit', 'Izin'].includes(status)) {
+            if (!keterangan || keterangan.trim() === '') {
+                return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + status });
+            }
+            finalKeterangan = keterangan.trim();
         }
 
         // Get student data from siswa_xirpl table
@@ -434,7 +468,7 @@ export const createHistory = async (req, res) => {
             tanggal: tanggal,
             waktu: waktu,
             status: status,
-            keterangan: (['Sakit', 'Izin', 'Alpha'].includes(status) && keterangan) ? keterangan.trim() : null
+            keterangan: (['Sakit', 'Izin', 'Alpha'].includes(status)) ? finalKeterangan : null
         };
 
         console.log('Inserting history to Supabase:', insertData);
@@ -1026,6 +1060,120 @@ export const sendWhatsAppMessage = async (req, res) => {
                 stack: error.stack
             } : undefined
         });
+    }
+};
+
+// Akhiri Absen - Add Alpha for all students who haven't absen today
+export const akhiriAbsen = async (req, res) => {
+    try {
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        // Get all students from siswa_xirpl
+        const { data: allSiswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid, role')
+            .order('nis', { ascending: true });
+
+        if (siswaError) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        if (!allSiswa || allSiswa.length === 0) {
+            return res.status(404).json({ message: 'Tidak ada data siswa' });
+        }
+
+        // Get all history records for today
+        const { data: todayHistory, error: historyError } = await supabase
+            .from('history')
+            .select('nis')
+            .eq('tanggal', today);
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Create a set of NIS that already have history today
+        const sudahAbsenNIS = new Set();
+        if (todayHistory && todayHistory.length > 0) {
+            todayHistory.forEach(record => {
+                sudahAbsenNIS.add(record.nis);
+            });
+        }
+
+        // Filter students who haven't absen today
+        const belumAbsen = allSiswa.filter(siswa => !sudahAbsenNIS.has(siswa.nis));
+
+        if (belumAbsen.length === 0) {
+            return res.json({
+                message: 'Semua siswa sudah absen hari ini',
+                added: 0
+            });
+        }
+
+        // Get current time in HH:MM:SS format
+        const hours = String(wibTime.getUTCHours()).padStart(2, '0');
+        const minutes = String(wibTime.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(wibTime.getUTCSeconds()).padStart(2, '0');
+        const waktu = `${hours}:${minutes}:${seconds}`;
+
+        // Prepare insert data for all students who haven't absen
+        const insertData = belumAbsen.map(siswa => ({
+            nis: siswa.nis,
+            nama: siswa.nama || null,
+            role: siswa.role || null,
+            rfid: siswa.rfid || null,
+            tanggal: today,
+            waktu: waktu,
+            status: 'Alpha',
+            keterangan: 'Tidak Ada Keterangan'
+        }));
+
+        console.log(`Adding Alpha for ${insertData.length} students who haven't absen today`);
+
+        // Insert all records at once
+        const { data: newHistory, error: insertError } = await supabase
+            .from('history')
+            .insert(insertData)
+            .select();
+
+        if (insertError) {
+            console.error('Error inserting history:', insertError);
+            return res.status(500).json({ 
+                message: 'Gagal menambahkan absen Alpha',
+                error: insertError.message 
+            });
+        }
+
+        console.log(`Successfully added ${newHistory.length} Alpha records`);
+
+        // Set alat status to NonActive after akhiri absen
+        const { error: updateActionError } = await supabase
+            .from('action')
+            .update({ status: 'NonActive' })
+            .eq('tanggal', today);
+
+        if (updateActionError) {
+            console.error('Error updating action status:', updateActionError);
+            // Don't fail the request, just log the error
+        } else {
+            console.log('Alat status updated to NonActive');
+        }
+
+        return res.json({
+            message: `Absen hari ini berhasil diakhiri. ${newHistory.length} siswa ditambahkan dengan status Alpha. Status alat diubah menjadi NonActive.`,
+            added: newHistory.length,
+            students: newHistory.map(h => ({ nis: h.nis, nama: h.nama }))
+        });
+    } catch (error) {
+        console.error('Akhiri absen error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan saat mengakhiri absen' });
     }
 };
 

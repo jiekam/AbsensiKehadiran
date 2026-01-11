@@ -294,6 +294,35 @@ window.addEventListener('DOMContentLoaded', async () => {
         addAbsenBtn.addEventListener('click', showAddAbsenModal);
     }
 
+    // Akhiri Absen Button
+    const akhiriAbsenBtn = document.getElementById('akhiriAbsenBtn');
+    if (akhiriAbsenBtn) {
+        akhiriAbsenBtn.addEventListener('click', showAkhiriAbsenModal);
+    }
+
+    // Akhiri Absen Modal
+    const akhiriAbsenModal = document.getElementById('akhiriAbsenModal');
+    const closeAkhiriAbsenModal = document.getElementById('closeAkhiriAbsenModal');
+    const cancelAkhiriAbsenBtn = document.getElementById('cancelAkhiriAbsenBtn');
+    const confirmAkhiriAbsenBtn = document.getElementById('confirmAkhiriAbsenBtn');
+
+    if (closeAkhiriAbsenModal) {
+        closeAkhiriAbsenModal.addEventListener('click', hideAkhiriAbsenModal);
+    }
+    if (cancelAkhiriAbsenBtn) {
+        cancelAkhiriAbsenBtn.addEventListener('click', hideAkhiriAbsenModal);
+    }
+    if (confirmAkhiriAbsenBtn) {
+        confirmAkhiriAbsenBtn.addEventListener('click', handleAkhiriAbsen);
+    }
+    if (akhiriAbsenModal) {
+        akhiriAbsenModal.addEventListener('click', (e) => {
+            if (e.target === akhiriAbsenModal) {
+                hideAkhiriAbsenModal();
+            }
+        });
+    }
+
     // Add Absen Modal
     const addAbsenModal = document.getElementById('addAbsenModal');
     const closeAddAbsenModal = document.getElementById('closeAddAbsenModal');
@@ -332,6 +361,60 @@ window.addEventListener('DOMContentLoaded', async () => {
         keteranganDetailModal.addEventListener('click', (e) => {
             if (e.target === keteranganDetailModal) {
                 hideKeteranganDetailModal();
+            }
+        });
+    }
+
+    // Keterangan Input Modal
+    const keteranganInputModal = document.getElementById('keteranganInputModal');
+    const closeKeteranganInputModal = document.getElementById('closeKeteranganInputModal');
+    const cancelKeteranganInputBtn = document.getElementById('cancelKeteranganInputBtn');
+    const submitKeteranganInputBtn = document.getElementById('submitKeteranganInputBtn');
+    const keteranganInputTextarea = document.getElementById('keteranganInputTextarea');
+
+    if (closeKeteranganInputModal) {
+        closeKeteranganInputModal.addEventListener('click', () => {
+            if (window.keteranganInputCallback) {
+                window.keteranganInputCallback(null);
+            }
+            hideKeteranganInputModal();
+        });
+    }
+    if (cancelKeteranganInputBtn) {
+        cancelKeteranganInputBtn.addEventListener('click', () => {
+            if (window.keteranganInputCallback) {
+                window.keteranganInputCallback(null);
+            }
+            hideKeteranganInputModal();
+        });
+    }
+    if (submitKeteranganInputBtn) {
+        submitKeteranganInputBtn.addEventListener('click', () => {
+            const keterangan = keteranganInputTextarea ? keteranganInputTextarea.value.trim() : '';
+            if (window.keteranganInputCallback) {
+                window.keteranganInputCallback(keterangan);
+            }
+            hideKeteranganInputModal();
+        });
+    }
+    if (keteranganInputModal) {
+        keteranganInputModal.addEventListener('click', (e) => {
+            if (e.target === keteranganInputModal) {
+                if (window.keteranganInputCallback) {
+                    window.keteranganInputCallback(null);
+                }
+                hideKeteranganInputModal();
+            }
+        });
+    }
+    // Allow Enter key to submit (Ctrl+Enter or Cmd+Enter)
+    if (keteranganInputTextarea) {
+        keteranganInputTextarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (submitKeteranganInputBtn) {
+                    submitKeteranganInputBtn.click();
+                }
             }
         });
     }
@@ -469,6 +552,8 @@ async function loadHistoryData() {
 
     if (loadingCell) loadingCell.style.display = 'flex';
     if (tableContainer) tableContainer.style.display = 'none';
+    
+    showLoading('Memuat data history...');
 
     try {
         const token = localStorage.getItem('token');
@@ -530,7 +615,9 @@ async function loadHistoryData() {
 
         if (loadingCell) loadingCell.style.display = 'none';
         if (tableContainer) tableContainer.style.display = 'block';
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error loading history data:', error);
         if (loadingCell) {
             loadingCell.innerHTML = `
@@ -645,26 +732,44 @@ function renderHistoryTable() {
             const keteranganCell = row.querySelector('.keterangan-cell');
             const existingKeterangan = keteranganCell ? keteranganCell.dataset.originalKeterangan : '';
 
-            // Show prompt for keterangan if status is Sakit, Izin, or Alpha
-            let keterangan = '';
+            // Show modal for keterangan if status is Sakit, Izin, or Alpha
             if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
                 // If existing keterangan exists and status is changing from another status that requires keterangan, use it as default
-                const defaultKeterangan = (existingKeterangan && existingKeterangan !== '-') ? existingKeterangan : '';
-                keterangan = prompt(`Masukkan keterangan untuk status ${newStatus}:`, defaultKeterangan);
-                if (keterangan === null) {
-                    // User cancelled, revert to original status
-                    e.target.value = originalStatus;
-                    return;
+                // For Alpha, if existing keterangan is empty or "Tidak Ada Keterangan", use empty string
+                let defaultKeterangan = '';
+                if (existingKeterangan && existingKeterangan !== '-') {
+                    if (newStatus === 'Alpha' && existingKeterangan === 'Tidak Ada Keterangan') {
+                        defaultKeterangan = '';
+                    } else {
+                        defaultKeterangan = existingKeterangan;
+                    }
                 }
-                if (!keterangan || keterangan.trim() === '') {
-                    alert('Keterangan wajib diisi untuk status ' + newStatus);
-                    e.target.value = originalStatus;
-                    return;
-                }
-                keterangan = keterangan.trim();
+                
+                // Show modal and wait for user input
+                showKeteranganInputModal(newStatus, defaultKeterangan, async (keterangan) => {
+                    if (keterangan === null) {
+                        // User cancelled, revert to original status
+                        e.target.value = originalStatus;
+                        return;
+                    }
+                    
+                    // For Alpha, if empty, set default "Tidak Ada Keterangan"
+                    let finalKeterangan = keterangan.trim();
+                    if (newStatus === 'Alpha' && (!finalKeterangan || finalKeterangan === '')) {
+                        finalKeterangan = 'Tidak Ada Keterangan';
+                    } else if (newStatus !== 'Alpha' && (!finalKeterangan || finalKeterangan === '')) {
+                        // For Sakit and Izin, keterangan is required
+                        alert('Keterangan wajib diisi untuk status ' + newStatus);
+                        e.target.value = originalStatus;
+                        return;
+                    }
+                    
+                    await updateHistoryStatus(historyId, newStatus, e.target, finalKeterangan);
+                });
+            } else {
+                // No keterangan needed, proceed with update
+                await updateHistoryStatus(historyId, newStatus, e.target, '');
             }
-
-            await updateHistoryStatus(historyId, newStatus, e.target, keterangan);
         });
     });
 
@@ -746,6 +851,69 @@ function showKeteranganDetailModal(recordData) {
     modal.style.display = 'flex';
 }
 
+// Show Keterangan Input Modal
+function showKeteranganInputModal(status, defaultKeterangan = '', callback) {
+    const modal = document.getElementById('keteranganInputModal');
+    const textarea = document.getElementById('keteranganInputTextarea');
+    const statusLabel = document.getElementById('keteranganInputStatusLabel');
+    const title = document.getElementById('keteranganInputTitle');
+    const keteranganLabel = document.querySelector('#keteranganInputModal label');
+    const keteranganSmall = document.querySelector('#keteranganInputModal small');
+    
+    if (!modal || !textarea || !statusLabel || !title) return;
+    
+    // Set status label and title
+    statusLabel.textContent = status;
+    title.textContent = `Masukkan Keterangan`;
+    
+    // For Alpha, make keterangan optional
+    const isAlpha = status === 'Alpha';
+    if (keteranganLabel) {
+        if (isAlpha) {
+            // Remove required indicator for Alpha
+            keteranganLabel.innerHTML = `Keterangan untuk status <span id="keteranganInputStatusLabel" style="font-weight: 600;">${status}</span> (Opsional)`;
+        } else {
+            // Keep required indicator for Sakit and Izin
+            keteranganLabel.innerHTML = `Keterangan untuk status <span id="keteranganInputStatusLabel" style="font-weight: 600;">${status}</span> <span style="color: var(--danger);">*</span>`;
+        }
+    }
+    if (keteranganSmall) {
+        if (isAlpha) {
+            keteranganSmall.textContent = 'Keterangan opsional untuk Alpha. Jika dikosongkan, akan otomatis diisi "Tidak Ada Keterangan"';
+        } else {
+            keteranganSmall.textContent = 'Keterangan wajib diisi untuk status ini';
+        }
+    }
+    
+    // Set default value
+    textarea.value = defaultKeterangan || '';
+    
+    // Focus on textarea
+    setTimeout(() => {
+        textarea.focus();
+        textarea.select();
+    }, 100);
+    
+    // Store callback
+    window.keteranganInputCallback = callback;
+    
+    // Show modal
+    modal.style.display = 'flex';
+}
+
+// Hide Keterangan Input Modal
+function hideKeteranganInputModal() {
+    const modal = document.getElementById('keteranganInputModal');
+    if (modal) {
+        modal.style.display = 'none';
+        const textarea = document.getElementById('keteranganInputTextarea');
+        if (textarea) {
+            textarea.value = '';
+        }
+        window.keteranganInputCallback = null;
+    }
+}
+
 // Hide Keterangan Detail Modal
 function hideKeteranganDetailModal() {
     const modal = document.getElementById('keteranganDetailModal');
@@ -768,6 +936,7 @@ function hideKeteranganDetailModal() {
 
 // Update Keterangan from Modal
 async function updateKeteranganFromModal(historyId, newKeterangan) {
+    showLoading('Memperbarui keterangan...');
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -831,7 +1000,9 @@ async function updateKeteranganFromModal(historyId, newKeterangan) {
         
         // Reload history data to ensure sync
         await loadHistoryData();
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error updating keterangan:', error);
         showToast(error.message || 'Gagal memperbarui keterangan', 'error');
         throw error;
@@ -895,6 +1066,7 @@ async function updateKeterangan(historyId, newKeterangan, cellElement, textSpan,
 
 // Update History Status
 async function updateHistoryStatus(historyId, newStatus, selectElement, keterangan = '') {
+    showLoading('Memperbarui status...');
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -926,12 +1098,141 @@ async function updateHistoryStatus(historyId, newStatus, selectElement, keterang
         
         // Reload history data
         await loadHistoryData();
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error updating history status:', error);
         showToast(error.message || 'Gagal memperbarui status', 'error');
         // Revert select to original value
         const originalStatus = selectElement.dataset.originalStatus;
         selectElement.value = originalStatus;
+    }
+}
+
+// Show Akhiri Absen Confirmation Modal
+function showAkhiriAbsenModal() {
+    const modal = document.getElementById('akhiriAbsenModal');
+    if (!modal) return;
+    
+    // Check alat status first
+    checkAlatStatusForAkhiriAbsen().then((isActive) => {
+        if (!isActive) {
+            showToast('Tidak dapat mengakhiri absen. Alat harus dalam status Active.', 'error');
+            return;
+        }
+        
+        // Show modal
+        modal.style.display = 'flex';
+    }).catch((error) => {
+        console.error('Error checking alat status:', error);
+        showToast('Gagal memeriksa status alat', 'error');
+    });
+}
+
+// Hide Akhiri Absen Modal
+function hideAkhiriAbsenModal() {
+    const modal = document.getElementById('akhiriAbsenModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Check alat status before allowing akhiri absen
+async function checkAlatStatusForAkhiriAbsen() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/action`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Gagal memeriksa status alat');
+        }
+
+        const data = await response.json();
+        const action = data.action;
+        
+        // Check if action exists and is Active
+        if (action && action.status === 'Active') {
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Error checking alat status:', error);
+        throw error;
+    }
+}
+
+// Handle Akhiri Absen - Add Alpha for all students who haven't absen today
+async function handleAkhiriAbsen() {
+    // Hide modal first
+    hideAkhiriAbsenModal();
+    
+    // Show loading overlay
+    showLoading('Mengakhiri absen hari ini...');
+    
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/history/akhiri-absen`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Gagal mengakhiri absen' }));
+            throw new Error(errorData.message || 'Gagal mengakhiri absen');
+        }
+
+        const data = await response.json();
+        
+        // Update loading text
+        showLoading('Memuat ulang data...');
+        
+        // Reload history data
+        await loadHistoryData();
+        
+        // Refresh alat status
+        if (token) {
+            const actionResponse = await fetch(`${API_URL}/api/admin/action`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (actionResponse.ok) {
+                const actionData = await actionResponse.json();
+                if (actionData.action) {
+                    alatStatusData = actionData.action;
+                    updateAlatUI();
+                    // Update akhiri absen button state
+                    updateAkhiriAbsenButtonState();
+                }
+            }
+        }
+        
+        hideLoading();
+        showToast(data.message || 'Absen hari ini berhasil diakhiri', 'success');
+    } catch (error) {
+        hideLoading();
+        console.error('Error handling akhiri absen:', error);
+        showToast(error.message || 'Gagal mengakhiri absen', 'error');
     }
 }
 
@@ -1053,9 +1354,36 @@ function showAddAbsenModal() {
         // Add new listener
         newStatusSelect.addEventListener('change', function() {
             const status = this.value;
+            const keteranganLabel = document.getElementById('absenKeteranganLabel');
+            const keteranganSmall = document.getElementById('absenKeteranganSmall');
+            
             if (['Sakit', 'Izin', 'Alpha'].includes(status)) {
                 keteranganFormGroup.style.display = 'block';
-                if (keteranganInput) keteranganInput.required = true;
+                
+                // Update label and small text based on status
+                if (status === 'Alpha') {
+                    // Alpha: optional
+                    if (keteranganLabel) {
+                        keteranganLabel.innerHTML = 'Keterangan (Opsional):';
+                    }
+                    if (keteranganSmall) {
+                        keteranganSmall.textContent = 'Keterangan opsional untuk Alpha. Jika dikosongkan, akan otomatis diisi "Tidak Ada Keterangan"';
+                    }
+                    if (keteranganInput) {
+                        keteranganInput.required = false;
+                    }
+                } else {
+                    // Sakit and Izin: required
+                    if (keteranganLabel) {
+                        keteranganLabel.innerHTML = 'Keterangan <span style="color: var(--danger);">*</span>:';
+                    }
+                    if (keteranganSmall) {
+                        keteranganSmall.textContent = 'Keterangan wajib diisi untuk status ' + status;
+                    }
+                    if (keteranganInput) {
+                        keteranganInput.required = true;
+                    }
+                }
             } else {
                 keteranganFormGroup.style.display = 'none';
                 if (keteranganInput) {
@@ -1092,22 +1420,8 @@ function hideAddAbsenModal() {
 
 // Submit Add Absen
 async function submitAddAbsen() {
-    const submitBtn = document.getElementById('submitAddAbsenBtn');
-    const btnText = submitBtn ? submitBtn.querySelector('.btn-text') : null;
-    const originalText = btnText ? btnText.textContent : 'Simpan';
-
-    if (submitBtn) submitBtn.disabled = true;
-    if (btnText) {
-        btnText.innerHTML = `
-            <div class="loading-boxes" style="display: inline-flex; gap: 4px; align-items: center;">
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-            </div>
-            <span style="margin-left: 8px;">Menyimpan...</span>
-        `;
-    }
-
+    showLoading('Menambahkan data absen...');
+    
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -1133,7 +1447,11 @@ async function submitAddAbsen() {
         }
 
         // Validate keterangan for Sakit, Izin, Alpha
-        if (['Sakit', 'Izin', 'Alpha'].includes(status) && !keterangan) {
+        // For Alpha, keterangan is optional - if empty, set default "Tidak Ada Keterangan"
+        let finalKeterangan = keterangan;
+        if (status === 'Alpha' && (!keterangan || keterangan.trim() === '')) {
+            finalKeterangan = 'Tidak Ada Keterangan';
+        } else if (['Sakit', 'Izin'].includes(status) && !keterangan) {
             throw new Error('Keterangan wajib diisi untuk status ' + status);
         }
 
@@ -1150,7 +1468,7 @@ async function submitAddAbsen() {
                 rfid: siswa.rfid || '',
                 tanggal: tanggal,
                 status: status,
-                keterangan: keterangan
+                keterangan: finalKeterangan
             })
         });
 
@@ -1167,12 +1485,11 @@ async function submitAddAbsen() {
         setTimeout(async () => {
             await loadHistoryData();
         }, 500);
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error submitting absen:', error);
         showToast(error.message || 'Gagal menambahkan absen', 'error');
-    } finally {
-        if (submitBtn) submitBtn.disabled = false;
-        if (btnText) btnText.textContent = originalText;
     }
 }
 
@@ -1215,6 +1532,8 @@ function switchPage(page) {
         if (historyPage) historyPage.classList.add('active');
         // Load history data when switching to this page
         loadHistoryData();
+        // Load alat status to update button state
+        loadAlatStatusManually();
         // Attach WhatsApp button event listener when switching to history page
         setTimeout(() => {
             const sendHistoryWhatsAppBtn = document.getElementById('sendHistoryWhatsAppBtn');
@@ -1240,7 +1559,12 @@ function switchPage(page) {
         if (alatTab) alatTab.classList.add('active');
         if (alatPage) alatPage.classList.add('active');
         // Load alat status when switching to this page
-        loadAlatStatus();
+        if (typeof loadAlatStatus === 'function') {
+            loadAlatStatus();
+        } else {
+            // Fallback: load alat status manually
+            loadAlatStatusManually();
+        }
         // Initialize 3D when switching to this page
         initAlat3D();
     } else if (page === 'statistik-siswa') {
@@ -1334,6 +1658,8 @@ async function loadSiswaData() {
     if (loadingCell) loadingCell.style.display = 'flex';
     if (tableContainer) tableContainer.style.display = 'none';
     if (footer) footer.style.display = 'none';
+    
+    showLoading('Memuat data siswa...');
 
     try {
         const token = localStorage.getItem('token');
@@ -1362,7 +1688,9 @@ async function loadSiswaData() {
 
         if (loadingCell) loadingCell.style.display = 'none';
         if (tableContainer) tableContainer.style.display = 'block';
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error loading siswa data:', error);
         if (loadingCell) {
             loadingCell.innerHTML = `
@@ -1439,21 +1767,8 @@ function cancelSiswaEdit() {
 
 // Save Changes
 async function saveSiswaChanges() {
-    const saveBtn = document.getElementById('saveEditBtn');
-    const originalText = saveBtn ? saveBtn.innerHTML : '';
+    showLoading('Menyimpan perubahan...');
     
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = `
-            <div class="loading-boxes" style="display: flex; gap: 4px; align-items: center;">
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-                <div class="loading-box" style="width: 8px; height: 8px; background: white;"></div>
-            </div>
-            <span style="margin-left: 8px;">Menyimpan...</span>
-        `;
-    }
-
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -1506,20 +1821,13 @@ async function saveSiswaChanges() {
         // Reload data
         await loadSiswaData();
         
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = originalText;
-        }
-        
         // Update original data
         originalSiswaData = JSON.parse(JSON.stringify(siswaData));
+        hideLoading();
     } catch (error) {
+        hideLoading();
         console.error('Error saving siswa data:', error);
         showToast(error.message || 'Gagal menyimpan perubahan', 'error');
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = originalText;
-        }
     }
 }
 
@@ -1554,6 +1862,29 @@ async function deleteHistoryRecord(historyId) {
     } catch (error) {
         console.error('Error deleting history record:', error);
         showToast(error.message || 'Gagal menghapus data', 'error');
+    }
+}
+
+// Loading Overlay Functions
+function showLoading(text = 'Memproses...') {
+    const overlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+    if (overlay) {
+        if (loadingText) {
+            loadingText.textContent = text;
+        }
+        overlay.style.display = 'flex';
+        // Prevent body scroll
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+        // Restore body scroll
+        document.body.style.overflow = '';
     }
 }
 
@@ -1609,6 +1940,29 @@ document.addEventListener('input', (e) => {
 
 // Alat Management
 let alatStatusData = null;
+
+// Initialize alat status on page load
+async function initializeAlatStatus() {
+    await loadAlatStatusManually();
+    // Update button state after loading
+    updateAkhiriAbsenButtonState();
+}
+
+// Initialize on page load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeAlatStatus();
+    });
+} else {
+    initializeAlatStatus();
+}
+
+// Initialize alat status on page load
+async function initializeAlatStatus() {
+    await loadAlatStatusManually();
+    // Update button state after loading
+    updateAkhiriAbsenButtonState();
+}
 let alatSupabaseClient = null;
 let alatActionSubscription = null;
 let alatScene = null;
@@ -1808,10 +2162,67 @@ function updateAlatUI() {
             ? 'Alat sedang aktif dan siap menerima absensi'
             : 'Alat tidak aktif, absensi tidak dapat dilakukan';
     }
+
+    // Update akhiri absen button state
+    updateAkhiriAbsenButtonState();
+}
+
+// Load Alat Status Manually
+async function loadAlatStatusManually() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Token tidak ditemukan');
+        }
+
+        const response = await fetch(`${API_URL}/api/admin/action`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Gagal mengambil status alat');
+        }
+
+        const data = await response.json();
+        alatStatusData = data.action;
+        updateAlatUI();
+    } catch (error) {
+        console.error('Error loading alat status:', error);
+    }
+}
+
+// Update Akhiri Absen Button State based on alat status
+function updateAkhiriAbsenButtonState() {
+    const akhiriAbsenBtn = document.getElementById('akhiriAbsenBtn');
+    if (!akhiriAbsenBtn) return;
+
+    const isActive = alatStatusData && alatStatusData.status === 'Active';
+    
+    if (isActive) {
+        akhiriAbsenBtn.disabled = false;
+        akhiriAbsenBtn.style.opacity = '1';
+        akhiriAbsenBtn.style.cursor = 'pointer';
+        akhiriAbsenBtn.title = 'Akhiri absen hari ini';
+    } else {
+        akhiriAbsenBtn.disabled = true;
+        akhiriAbsenBtn.style.opacity = '0.5';
+        akhiriAbsenBtn.style.cursor = 'not-allowed';
+        akhiriAbsenBtn.title = 'Alat harus dalam status Active untuk mengakhiri absen';
+    }
+}
+
+// Load alat status on page load and periodically
+async function loadAlatStatus() {
+    await loadAlatStatusManually();
 }
 
 // Create Alat Action (if not exists)
 async function createAlatAction() {
+    // Don't show loading for auto-create, it's automatic
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -1838,15 +2249,16 @@ async function createAlatAction() {
         const data = await response.json();
         alatStatusData = data.action;
         updateAlatUI();
-        showToast('Data action berhasil dibuat', 'success');
+        // Don't show toast for auto-create
     } catch (error) {
         console.error('Error creating alat action:', error);
-        showToast(error.message || 'Gagal membuat data action', 'error');
+        // Don't show toast for auto-create errors
     }
 }
 
 // Update Alat Status
 async function updateAlatStatus(newStatus) {
+    showLoading('Memperbarui status alat...');
     try {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -1878,10 +2290,15 @@ async function updateAlatStatus(newStatus) {
         updateAlatUI();
         showToast(`Status berhasil diubah menjadi ${newStatus}`, 'success');
         
+        // Update akhiri absen button state
+        updateAkhiriAbsenButtonState();
+        
+        hideLoading();
         if (alatStatusToggle) {
             alatStatusToggle.disabled = false;
         }
     } catch (error) {
+        hideLoading();
         console.error('Error updating alat status:', error);
         showToast(error.message || 'Gagal memperbarui status', 'error');
         

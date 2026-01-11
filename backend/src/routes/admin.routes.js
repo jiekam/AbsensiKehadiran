@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction, getTodayRecap, sendWhatsAppMessage, getStudentAnalysis, getStudentStatistics } from '../controllers/admin.controllers.js';
+import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction, getTodayRecap, sendWhatsAppMessage, getStudentAnalysis, getStudentStatistics, akhiriAbsen } from '../controllers/admin.controllers.js';
 import { authenticateToken, requireAdmin } from '../middlewares/auth.js';
 
 const router = Router();
@@ -10,6 +10,7 @@ router.get('/siswa/belum-absen', authenticateToken, requireAdmin, getSiswaBelumA
 router.post('/siswa/update', authenticateToken, requireAdmin, updateSiswa);
 router.get('/history', authenticateToken, requireAdmin, getAllHistory);
 router.post('/history', authenticateToken, requireAdmin, createHistory);
+router.post('/history/akhiri-absen', authenticateToken, requireAdmin, akhiriAbsen);
 router.put('/history/:id/status', authenticateToken, requireAdmin, updateHistoryStatus);
 router.delete('/history/:id', authenticateToken, requireAdmin, deleteHistory);
 router.get('/action', authenticateToken, requireAdmin, getActionToday);
