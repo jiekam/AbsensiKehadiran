@@ -6,6 +6,7 @@ import { dirname, join } from 'path';
 import authRoutes from "./routes/auth.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import exportRoutes from "./src/routes/csv.routes.js"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,6 +30,7 @@ app.get("/api/config", (req, res) => {
 app.use("/auth", authRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/export", exportRoutes)
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend is running" });

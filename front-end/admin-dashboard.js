@@ -3311,3 +3311,32 @@ function hideStudentStatisticsModal() {
 window.loadStatistikSiswa = loadStatistikSiswa;
 window.showStudentStatistics = showStudentStatistics;
 
+
+document.getElementById("exportCsvBtn").addEventListener("click", () => {
+    const table = document.getElementById("siswaTable")
+    let csv = []
+
+    for (let row of table.rows) {
+        let rowData = []
+        for (let cell of row.cells) {
+            // skip kolom checkbox
+            if (cell.querySelector("input[type='checkbox']")) continue
+            rowData.push(`"${cell.innerText.trim()}"`)
+        }
+        csv.push(rowData.join(","))
+    }
+
+    downloadCSV(csv.join("\n"), "data_siswa.csv")
+})
+
+function downloadCSV(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+}
