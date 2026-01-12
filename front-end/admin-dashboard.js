@@ -3316,13 +3316,39 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
     const table = document.getElementById("siswaTable")
     let csv = []
 
-    for (let row of table.rows) {
+    // === HEADER MANUAL (BIAR RAPI & TERKONTROL) ===
+    csv.push('"ID","NAMA","NIS","RFID"')
+
+    // === LOOP BODY (LEWATI HEADER TABEL ASLI) ===
+    for (let i = 1; i < table.rows.length; i++) {
+        const row = table.rows[i]
         let rowData = []
-        for (let cell of row.cells) {
-            // skip kolom checkbox
-            if (cell.querySelector("input[type='checkbox']")) continue
-            rowData.push(`"${cell.innerText.trim()}"`)
+
+        for (let j = 0; j < row.cells.length; j++) {
+
+            // skip kolom:
+            // 0 = checkbox
+            // 5 = role
+            // 6 = password
+            if (j === 0 || j === 5 || j === 6) continue
+
+            let value = ""
+            const cell = row.cells[j]
+
+            const input = cell.querySelector("input")
+            const select = cell.querySelector("select")
+
+            if (input) {
+                value = input.value
+            } else if (select) {
+                value = select.value
+            } else {
+                value = cell.innerText
+            }
+
+            rowData.push(`"${value.trim()}"`)
         }
+
         csv.push(rowData.join(","))
     }
 
@@ -3330,7 +3356,9 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
 })
 
 function downloadCSV(csvContent, filename) {
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const blob = new Blob([csvContent], {
+        type: "text/csv;charset=utf-8;"
+    })
     const url = URL.createObjectURL(blob)
 
     const a = document.createElement("a")
@@ -3340,3 +3368,4 @@ function downloadCSV(csvContent, filename) {
     a.click()
     a.remove()
 }
+
