@@ -1,0 +1,1258 @@
+import { supabase } from '../config/supabase.js';
+
+// Use global fetch (available in Node.js 18+)
+// Railway uses Node.js 18+, so we can use native fetch
+// No need for node-fetch dependency
+
+// Get all siswa data
+export const getAllSiswa = async (req, res) => {
+    try {
+        const { data: siswa, error } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid, role, password')
+            .order('id', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching siswa:', error);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        return res.json({
+            message: 'Data siswa berhasil diambil',
+            siswa: siswa || []
+        });
+    } catch (error) {
+        console.error('Get all siswa error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get siswa who haven't absen yet for a specific date
+export const getSiswaBelumAbsen = async (req, res) => {
+    try {
+        const { tanggal } = req.query;
+
+        if (!tanggal) {
+            return res.status(400).json({ message: 'Parameter tanggal diperlukan' });
+        }
+
+        // Get all siswa
+        const { data: allSiswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid')
+            .order('nama', { ascending: true });
+
+        if (siswaError) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        // Get history for the selected date
+        const { data: history, error: historyError } = await supabase
+            .from('history')
+            .select('nis, rfid')
+            .eq('tanggal', tanggal);
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Create a set of students who already have history for this date
+        const sudahAbsen = new Set();
+        if (history && history.length > 0) {
+            history.forEach(record => {
+                const key = `${record.nis}-${record.rfid || ''}`;
+                sudahAbsen.add(key);
+            });
+        }
+
+        // Filter out students who already have history
+        const belumAbsen = (allSiswa || []).filter(siswa => {
+            const key = `${siswa.nis}-${siswa.rfid || ''}`;
+            return !sudahAbsen.has(key);
+        });
+
+        return res.json({
+            message: 'Data siswa belum absen berhasil diambil',
+            siswa: belumAbsen
+        });
+    } catch (error) {
+        console.error('Get siswa belum absen error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Update siswa data
+export const updateSiswa = async (req, res) => {
+    try {
+        const { siswa } = req.body;
+
+        if (!siswa || !Array.isArray(siswa) || siswa.length === 0) {
+            return res.status(400).json({ message: 'Data siswa tidak valid' });
+        }
+
+        const updatePromises = siswa.map(async (item) => {
+            const { id, nama, nis, rfid, role, password } = item;
+
+            if (!id) {
+                throw new Error('ID siswa tidak boleh kosong');
+            }
+
+            const updateData = {};
+            if (nama !== undefined) updateData.nama = nama;
+            if (nis !== undefined) updateData.nis = nis;
+            if (rfid !== undefined) updateData.rfid = rfid;
+            if (role !== undefined) updateData.role = role;
+            if (password !== undefined) updateData.password = password;
+
+            const { error } = await supabase
+                .from('siswa_xirpl')
+                .update(updateData)
+                .eq('id', id);
+
+            if (error) {
+                console.error(`Error updating siswa ${id}:`, error);
+                throw new Error(`Gagal memperbarui data siswa dengan ID ${id}`);
+            }
+
+            return id;
+        });
+
+        await Promise.all(updatePromises);
+
+        return res.json({
+            message: 'Data siswa berhasil diperbarui',
+            updated: siswa.length
+        });
+    } catch (error) {
+        console.error('Update siswa error:', error);
+        return res.status(500).json({ 
+            message: error.message || 'Terjadi kesalahan saat memperbarui data siswa' 
+        });
+    }
+};
+
+// Get all history data (admin)
+export const getAllHistory = async (req, res) => {
+    try {
+        const { bulan, tanggal } = req.query; // bulan: YYYY-MM, tanggal: YYYY-MM-DD
+
+        // Get all history records - include nama and role directly from history table
+        let historyQuery = supabase
+            .from('history')
+            .select('id, waktu, tanggal, status, rfid, nis, nama, role, keterangan')
+            .order('tanggal', { ascending: false })
+            .order('waktu', { ascending: false });
+
+        // Filter by date if provided (prioritas lebih tinggi)
+        if (tanggal) {
+            historyQuery = historyQuery.eq('tanggal', tanggal);
+        } else if (bulan) {
+            // Filter by month if no specific date
+            const [year, month] = bulan.split('-');
+            const startDate = `${year}-${month}-01`;
+            const endDate = `${year}-${month}-31`;
+            historyQuery = historyQuery.gte('tanggal', startDate).lte('tanggal', endDate);
+        }
+
+        const { data: history, error: historyError } = await historyQuery;
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Debug: Log history data to check keterangan column
+        console.log('History records fetched:', history?.length || 0);
+        if (history && history.length > 0) {
+            console.log('=== HISTORY DATA DEBUG ===');
+            history.forEach((record, idx) => {
+                if (['Sakit', 'Izin', 'Alpha'].includes(record.status)) {
+                    console.log(`Record ${idx + 1} (ID: ${record.id}):`, {
+                        status: record.status,
+                        keterangan: record.keterangan,
+                        keteranganType: typeof record.keterangan,
+                        keteranganIsNull: record.keterangan === null,
+                        keteranganIsUndefined: record.keterangan === undefined,
+                        keteranganLength: record.keterangan ? String(record.keterangan).length : 0
+                    });
+                }
+            });
+            console.log('=== END DEBUG ===');
+        }
+
+        if (!history || history.length === 0) {
+            return res.json({
+                message: 'Data history berhasil diambil',
+                history: []
+            });
+        }
+
+        // Get siswa_id from siswa_xirpl for all records
+        // Get unique NIS from all history records
+        const uniqueNis = [...new Set(history.map(h => h.nis).filter(nis => nis))];
+        
+        // Fetch siswa data to get siswa_id
+        const siswaPromises = uniqueNis.map(async (nis) => {
+            const { data: siswa } = await supabase
+                .from('siswa_xirpl')
+                .select('id, nama, role, rfid, nis')
+                .eq('nis', nis)
+                .limit(1);
+            return { nis, siswa: siswa?.[0] || null };
+        });
+
+        const siswaResults = await Promise.all(siswaPromises);
+        const siswaMap = {};
+        siswaResults.forEach(({ nis, siswa }) => {
+            if (siswa) {
+                siswaMap[nis] = siswa;
+            }
+        });
+
+        // Transform history data to include siswa_id and fill null nama/role
+        const transformedHistory = history.map(record => {
+            const siswa = siswaMap[record.nis];
+            
+            // Process keterangan - handle null, undefined, or empty string
+            let keteranganValue = null;
+            if (record.keterangan !== null && record.keterangan !== undefined) {
+                const trimmed = String(record.keterangan).trim();
+                keteranganValue = trimmed !== '' ? trimmed : null;
+            }
+            
+            return {
+                id: siswa?.id || record.id, // Use siswa_id for display, fallback to history_id
+                history_id: record.id, // Keep history_id for update/delete operations
+                siswa_id: siswa?.id || null, // Explicit siswa_id field
+                waktu: record.waktu,
+                tanggal: record.tanggal,
+                status: record.status,
+                keterangan: keteranganValue, // Can be string or null
+                rfid: record.rfid,
+                nis: record.nis,
+                nama: record.nama || siswa?.nama || null,
+                role: record.role || siswa?.role || null
+            };
+        });
+        
+        // Debug: Log transformed data
+        console.log('=== TRANSFORMED HISTORY DATA ===');
+        transformedHistory.forEach((record, idx) => {
+            if (['Sakit', 'Izin', 'Alpha'].includes(record.status)) {
+                console.log(`Transformed Record ${idx + 1}:`, {
+                    history_id: record.history_id,
+                    status: record.status,
+                    keterangan: record.keterangan,
+                    keteranganType: typeof record.keterangan
+                });
+            }
+        });
+        console.log('=== END TRANSFORMED DATA ===');
+
+        return res.json({
+            message: 'Data history berhasil diambil',
+            history: transformedHistory
+        });
+    } catch (error) {
+        console.error('Get all history error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Update history status
+export const updateHistoryStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, keterangan } = req.body;
+
+        // Get current record to check existing status
+        const { data: currentRecord, error: fetchError } = await supabase
+            .from('history')
+            .select('status')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !currentRecord) {
+            return res.status(404).json({ message: 'Data history tidak ditemukan' });
+        }
+
+        const currentStatus = currentRecord.status;
+        const newStatus = status || currentStatus; // Use existing status if not provided
+
+        if (!['Hadir', 'Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+            return res.status(400).json({ message: 'Status tidak valid' });
+        }
+
+        // Build update data
+        const updateData = {};
+        
+        // Update status if provided
+        if (status && status !== currentStatus) {
+            updateData.status = status;
+        }
+
+        // Update keterangan
+        if (keterangan !== undefined) {
+            // Keterangan hanya diperlukan untuk Sakit, Izin, dan Alpha
+            if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+                if (newStatus === 'Alpha') {
+                    // For Alpha, if empty, set default "Tidak Ada Keterangan"
+                    if (!keterangan || keterangan.trim() === '') {
+                        updateData.keterangan = 'Tidak Ada Keterangan';
+                    } else {
+                        updateData.keterangan = keterangan.trim();
+                    }
+                } else {
+                    // For Sakit and Izin, keterangan is required
+                    if (!keterangan || keterangan.trim() === '') {
+                        return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                    }
+                    updateData.keterangan = keterangan.trim();
+                }
+            } else {
+                // For Hadir, set keterangan to null
+                updateData.keterangan = null;
+            }
+        } else if (status && status !== currentStatus) {
+            // If status changed but no keterangan provided, handle based on new status
+            if (['Sakit', 'Izin', 'Alpha'].includes(newStatus)) {
+                // If changing to Sakit/Izin/Alpha without keterangan, check if existing keterangan exists
+                const { data: existingRecord } = await supabase
+                    .from('history')
+                    .select('keterangan')
+                    .eq('id', id)
+                    .single();
+                
+                if (newStatus === 'Alpha') {
+                    // For Alpha, if no existing keterangan, set default
+                    if (!existingRecord?.keterangan || existingRecord.keterangan.trim() === '') {
+                        updateData.keterangan = 'Tidak Ada Keterangan';
+                    } else {
+                        // Keep existing keterangan if available
+                        updateData.keterangan = existingRecord.keterangan;
+                    }
+                } else {
+                    // For Sakit and Izin, keterangan is required
+                    if (!existingRecord?.keterangan || existingRecord.keterangan.trim() === '') {
+                        return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + newStatus });
+                    }
+                    // Keep existing keterangan if available
+                    updateData.keterangan = existingRecord.keterangan;
+                }
+            } else {
+                // Changing to Hadir, clear keterangan
+                updateData.keterangan = null;
+            }
+        }
+
+        const { error } = await supabase
+            .from('history')
+            .update(updateData)
+            .eq('id', id);
+
+        if (error) {
+            console.error(`Error updating history ${id}:`, error);
+            return res.status(500).json({ message: 'Gagal memperbarui status' });
+        }
+
+        return res.json({
+            message: 'Status berhasil diperbarui'
+        });
+    } catch (error) {
+        console.error('Update history status error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan saat memperbarui status' });
+    }
+};
+
+// Delete history record
+export const deleteHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('history')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error(`Error deleting history ${id}:`, error);
+            return res.status(500).json({ message: 'Gagal menghapus data' });
+        }
+
+        return res.json({
+            message: 'Data berhasil dihapus'
+        });
+    } catch (error) {
+        console.error('Delete history error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan saat menghapus data' });
+    }
+};
+
+// Create new history record (manual absen)
+export const createHistory = async (req, res) => {
+    try {
+        const { nis, rfid, tanggal, status, keterangan } = req.body;
+
+        if (!nis || !tanggal || !status) {
+            return res.status(400).json({ message: 'NIS, tanggal, dan status diperlukan' });
+        }
+
+        if (!['Hadir', 'Sakit', 'Izin', 'Alpha'].includes(status)) {
+            return res.status(400).json({ message: 'Status tidak valid' });
+        }
+
+        // Keterangan validation
+        // For Alpha, keterangan is optional - if empty, set default "Tidak Ada Keterangan"
+        // For Sakit and Izin, keterangan is required
+        let finalKeterangan = keterangan;
+        if (status === 'Alpha') {
+            if (!keterangan || keterangan.trim() === '') {
+                finalKeterangan = 'Tidak Ada Keterangan';
+            } else {
+                finalKeterangan = keterangan.trim();
+            }
+        } else if (['Sakit', 'Izin'].includes(status)) {
+            if (!keterangan || keterangan.trim() === '') {
+                return res.status(400).json({ message: 'Keterangan diperlukan untuk status ' + status });
+            }
+            finalKeterangan = keterangan.trim();
+        }
+
+        // Get student data from siswa_xirpl table
+        const { data: siswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid, role')
+            .eq('nis', nis)
+            .single();
+
+        if (siswaError || !siswa) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(404).json({ message: 'Data siswa tidak ditemukan' });
+        }
+
+        // Use rfid from request if provided, otherwise use from siswa data
+        const finalRfid = (rfid && rfid.trim() !== '') ? rfid : (siswa.rfid || null);
+
+        // Get current time in HH:MM:SS format (matching database format)
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const waktu = `${hours}:${minutes}:${seconds}`; // HH:MM:SS format
+
+        // Check if history already exists for this student on this date
+        const { data: existingHistory, error: checkError } = await supabase
+            .from('history')
+            .select('id')
+            .eq('nis', nis)
+            .eq('tanggal', tanggal)
+            .limit(1);
+
+        if (checkError) {
+            console.error('Error checking existing history:', checkError);
+            return res.status(500).json({ message: 'Gagal memeriksa data history' });
+        }
+
+        if (existingHistory && existingHistory.length > 0) {
+            return res.status(400).json({ message: 'Siswa ini sudah memiliki absen untuk tanggal ini' });
+        }
+
+        // Insert new history record to Supabase with nama, role, and rfid from siswa_xirpl
+        const insertData = {
+            nis: siswa.nis,
+            nama: siswa.nama || null,
+            role: siswa.role || null,
+            rfid: finalRfid,
+            tanggal: tanggal,
+            waktu: waktu,
+            status: status,
+            keterangan: (['Sakit', 'Izin', 'Alpha'].includes(status)) ? finalKeterangan : null
+        };
+
+        console.log('Inserting history to Supabase:', insertData);
+
+        const { data: newHistory, error: insertError } = await supabase
+            .from('history')
+            .insert(insertData)
+            .select()
+            .single();
+
+        if (insertError) {
+            console.error('Error creating history in Supabase:', insertError);
+            return res.status(500).json({ 
+                message: 'Gagal menambahkan absen ke database',
+                error: insertError.message 
+            });
+        }
+
+        console.log('History successfully inserted to Supabase:', newHistory);
+
+        return res.json({
+            message: 'Absen berhasil ditambahkan ke database',
+            history: newHistory
+        });
+    } catch (error) {
+        console.error('Create history error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan saat menambahkan absen' });
+    }
+};
+
+// Get action data for today
+export const getActionToday = async (req, res) => {
+    try {
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        // Convert to WIB (UTC+7)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        let { data: action, error } = await supabase
+            .from('action')
+            .select('*')
+            .eq('tanggal', today)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+            console.error('Error fetching action:', error);
+            return res.status(500).json({ message: 'Gagal mengambil data action' });
+        }
+
+        // If no action record exists for today, create one with status "NonActive" (default)
+        if (!action) {
+            console.log(`No action record found for today (${today}), creating new record with status "NonActive"...`);
+            
+            const { data: newAction, error: createError } = await supabase
+                .from('action')
+                .insert({
+                    nama: 'absensi',
+                    tanggal: today,
+                    status: 'NonActive'
+                })
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating action record:', createError);
+                return res.status(500).json({ 
+                    message: 'Gagal membuat data action',
+                    error: createError.message 
+                });
+            } else {
+                console.log('Successfully created action record for today:', newAction);
+                action = newAction;
+            }
+        }
+
+        return res.json({
+            message: 'Data action berhasil diambil',
+            action: action || null
+        });
+    } catch (error) {
+        console.error('Get action today error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Create or update action for today
+export const createOrUpdateAction = async (req, res) => {
+    try {
+        const { nama, status } = req.body;
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        // Convert to WIB (UTC+7)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        if (!status || !['Active', 'NonActive'].includes(status)) {
+            return res.status(400).json({ message: 'Status tidak valid' });
+        }
+
+        // Check if action exists for today
+        const { data: existingAction, error: checkError } = await supabase
+            .from('action')
+            .select('*')
+            .eq('tanggal', today)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+            console.error('Error checking action:', checkError);
+            return res.status(500).json({ message: 'Gagal memeriksa data action' });
+        }
+
+        if (existingAction) {
+            // Update existing action
+            const { data: updatedAction, error: updateError } = await supabase
+                .from('action')
+                .update({ status })
+                .eq('id', existingAction.id)
+                .select()
+                .single();
+
+            if (updateError) {
+                console.error('Error updating action:', updateError);
+                return res.status(500).json({ message: 'Gagal memperbarui data action' });
+            }
+
+            return res.json({
+                message: 'Status action berhasil diperbarui',
+                action: updatedAction
+            });
+        } else {
+            // Create new action
+            const { data: newAction, error: createError } = await supabase
+                .from('action')
+                .insert({
+                    nama: nama || 'absensi',
+                    tanggal: today,
+                    status: status
+                })
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating action:', createError);
+                return res.status(500).json({ message: 'Gagal membuat data action' });
+            }
+
+            return res.json({
+                message: 'Data action berhasil dibuat',
+                action: newAction
+            });
+        }
+    } catch (error) {
+        console.error('Create or update action error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get today's attendance recap
+export const getTodayRecap = async (req, res) => {
+    try {
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        // Get all history records for today
+        const { data: history, error: historyError } = await supabase
+            .from('history')
+            .select('id, waktu, tanggal, status, rfid, nis, nama, role')
+            .eq('tanggal', today)
+            .order('waktu', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching today recap:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data rekap absen' });
+        }
+
+        // Group by status
+        const recap = {
+            tanggal: today,
+            total: history?.length || 0,
+            hadir: history?.filter(h => h.status === 'Hadir').length || 0,
+            sakit: history?.filter(h => h.status === 'Sakit').length || 0,
+            izin: history?.filter(h => h.status === 'Izin').length || 0,
+            alpha: history?.filter(h => h.status === 'Alpha').length || 0,
+            details: history || []
+        };
+
+        return res.json({
+            message: 'Data rekap absen berhasil diambil',
+            recap: recap
+        });
+    } catch (error) {
+        console.error('Get today recap error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get student analysis (attendance per month for all students)
+export const getStudentAnalysis = async (req, res) => {
+    try {
+        // Get all students
+        const { data: allSiswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid')
+            .order('nama', { ascending: true });
+
+        if (siswaError) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        // Get all history records
+        const { data: allHistory, error: historyError } = await supabase
+            .from('history')
+            .select('nis, rfid, tanggal, status')
+            .order('tanggal', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Group history by month and student
+        const analysisPerBulan = {};
+        const siswaMap = {};
+
+        // Create siswa map for quick lookup
+        (allSiswa || []).forEach(siswa => {
+            const key = `${siswa.nis}-${siswa.rfid || ''}`;
+            siswaMap[key] = siswa;
+        });
+
+        // Process history records
+        if (allHistory && allHistory.length > 0) {
+            allHistory.forEach(record => {
+                const date = new Date(record.tanggal);
+                const bulanKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const bulan = date.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+                const siswaKey = `${record.nis}-${record.rfid || ''}`;
+
+                if (!analysisPerBulan[bulanKey]) {
+                    analysisPerBulan[bulanKey] = {
+                        bulan: bulan,
+                        bulanKey: bulanKey,
+                        siswa: {}
+                    };
+                }
+
+                if (!analysisPerBulan[bulanKey].siswa[siswaKey]) {
+                    const siswa = siswaMap[siswaKey] || { id: null, nama: record.nis, nis: record.nis, rfid: record.rfid };
+                    analysisPerBulan[bulanKey].siswa[siswaKey] = {
+                        id: siswa.id,
+                        nama: siswa.nama || record.nis,
+                        nis: siswa.nis || record.nis,
+                        rfid: siswa.rfid || record.rfid || '',
+                        hadir: 0,
+                        sakit: 0,
+                        izin: 0,
+                        alpha: 0,
+                        total: 0
+                    };
+                }
+
+                const status = (record.status || '').toLowerCase();
+                if (status === 'hadir') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].hadir++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'sakit') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].sakit++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'izin') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].izin++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                } else if (status === 'alpha') {
+                    analysisPerBulan[bulanKey].siswa[siswaKey].alpha++;
+                    analysisPerBulan[bulanKey].siswa[siswaKey].total++;
+                }
+            });
+        }
+
+        // Convert to array format and include all students (even those without history)
+        const analysisArray = Object.keys(analysisPerBulan)
+            .sort((a, b) => b.localeCompare(a)) // Newest first
+            .map(bulanKey => {
+                const bulanData = analysisPerBulan[bulanKey];
+                const siswaArray = Object.values(bulanData.siswa)
+                    .sort((a, b) => a.nama.localeCompare(b.nama));
+
+                return {
+                    bulan: bulanData.bulan,
+                    bulanKey: bulanData.bulanKey,
+                    siswa: siswaArray
+                };
+            });
+
+        // Get all students list (for reference)
+        const allStudentsList = (allSiswa || []).map(siswa => ({
+            id: siswa.id,
+            nama: siswa.nama,
+            nis: siswa.nis,
+            rfid: siswa.rfid || ''
+        }));
+
+        // Calculate activity status for each student
+        // A student is considered "active" if they have at least one attendance record in the last 3 months
+        const now = new Date();
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        const threeMonthsAgoKey = `${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
+
+        const studentActivity = {};
+        allStudentsList.forEach(siswa => {
+            const siswaKey = `${siswa.nis}-${siswa.rfid || ''}`;
+            let isActive = false;
+            let lastActivityMonth = null;
+            let totalRecords = 0;
+
+            // Check if student has records in recent months
+            analysisArray.forEach(bulanData => {
+                const siswaData = bulanData.siswa.find(s => `${s.nis}-${s.rfid || ''}` === siswaKey);
+                if (siswaData && siswaData.total > 0) {
+                    totalRecords += siswaData.total;
+                    if (!lastActivityMonth || bulanData.bulanKey > lastActivityMonth) {
+                        lastActivityMonth = bulanData.bulanKey;
+                    }
+                    // Consider active if has records in last 3 months
+                    if (bulanData.bulanKey >= threeMonthsAgoKey) {
+                        isActive = true;
+                    }
+                }
+            });
+
+            studentActivity[siswaKey] = {
+                isActive: isActive,
+                lastActivityMonth: lastActivityMonth,
+                totalRecords: totalRecords
+            };
+        });
+
+        return res.json({
+            message: 'Data analisis siswa berhasil diambil',
+            analysis: analysisArray,
+            allStudents: allStudentsList,
+            studentActivity: studentActivity
+        });
+    } catch (error) {
+        console.error('Get student analysis error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get individual student statistics (1 year total + monthly breakdown)
+export const getStudentStatistics = async (req, res) => {
+    try {
+        const { nis } = req.params;
+
+        if (!nis) {
+            return res.status(400).json({ message: 'NIS diperlukan' });
+        }
+
+        // Get student data
+        const { data: siswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid')
+            .eq('nis', nis)
+            .single();
+
+        if (siswaError || !siswa) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(404).json({ message: 'Data siswa tidak ditemukan' });
+        }
+
+        // Get current date and calculate 1 year ago
+        const now = new Date();
+        const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+        const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+        // Get all history records for this student in the last year
+        const { data: history, error: historyError } = await supabase
+            .from('history')
+            .select('tanggal, status')
+            .eq('nis', nis)
+            .gte('tanggal', oneYearAgoStr)
+            .order('tanggal', { ascending: false });
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Calculate total statistics for 1 year
+        const totalStats = {
+            hadir: 0,
+            sakit: 0,
+            izin: 0,
+            alpha: 0,
+            total: 0
+        };
+
+        // Group by month
+        const monthlyStats = {};
+
+        if (history && history.length > 0) {
+            history.forEach(record => {
+                const date = new Date(record.tanggal);
+                const bulanKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const bulan = date.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+
+                // Initialize month if not exists
+                if (!monthlyStats[bulanKey]) {
+                    monthlyStats[bulanKey] = {
+                        bulan: bulan,
+                        bulanKey: bulanKey,
+                        hadir: 0,
+                        sakit: 0,
+                        izin: 0,
+                        alpha: 0,
+                        total: 0
+                    };
+                }
+
+                // Count by status
+                const status = (record.status || '').toLowerCase();
+                if (status === 'hadir') {
+                    totalStats.hadir++;
+                    monthlyStats[bulanKey].hadir++;
+                } else if (status === 'sakit') {
+                    totalStats.sakit++;
+                    monthlyStats[bulanKey].sakit++;
+                } else if (status === 'izin') {
+                    totalStats.izin++;
+                    monthlyStats[bulanKey].izin++;
+                } else if (status === 'alpha') {
+                    totalStats.alpha++;
+                    monthlyStats[bulanKey].alpha++;
+                }
+
+                totalStats.total++;
+                monthlyStats[bulanKey].total++;
+            });
+        }
+
+        // Convert monthly stats to array, sorted by date (newest first)
+        const monthlyArray = Object.keys(monthlyStats)
+            .sort((a, b) => b.localeCompare(a))
+            .map(bulanKey => monthlyStats[bulanKey]);
+
+        return res.json({
+            message: 'Data statistik siswa berhasil diambil',
+            siswa: {
+                id: siswa.id,
+                nama: siswa.nama,
+                nis: siswa.nis,
+                rfid: siswa.rfid || ''
+            },
+            totalStats: totalStats,
+            monthlyStats: monthlyArray
+        });
+    } catch (error) {
+        console.error('Get student statistics error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Send WhatsApp message via Fonnte API
+export const sendWhatsAppMessage = async (req, res) => {
+    try {
+        const { phone, message } = req.body;
+
+        if (!phone || !message) {
+            return res.status(400).json({ message: 'Nomor telepon dan pesan wajib diisi' });
+        }
+
+        // Format phone number (remove +, spaces, etc.)
+        const formattedPhone = phone.replace(/[^0-9]/g, '');
+        
+        // Ensure phone starts with country code (Indonesia: 62)
+        let finalPhone = formattedPhone;
+        if (!formattedPhone.startsWith('62')) {
+            // If starts with 0, replace with 62
+            if (formattedPhone.startsWith('0')) {
+                finalPhone = '62' + formattedPhone.substring(1);
+            } else {
+                finalPhone = '62' + formattedPhone;
+            }
+        }
+
+        // Fonnte API endpoint
+        const fonnteUrl = 'https://api.fonnte.com/send';
+        
+        // FIXED: Jangan pernah pakai fallback token di production!
+        const fonnteToken = process.env.FONNTE_API_TOKEN;
+        
+        if (!fonnteToken) {
+            console.error('FATAL: FONNTE_API_TOKEN tidak ada di environment variables');
+            return res.status(500).json({ 
+                message: 'Fonnte API token tidak dikonfigurasi. Pastikan FONNTE_API_TOKEN ada di environment variables Railway.' 
+            });
+        }
+
+        // Send message via Fonnte API
+        // According to Fonnte API documentation: https://api.fonnte.com/send
+        // - Authorization: TOKEN (in header)
+        // - Body: form data with 'target' and 'message'
+        const formData = new URLSearchParams();
+        formData.append('target', finalPhone);
+        formData.append('message', message);
+        
+        console.log('Sending WhatsApp message to:', finalPhone);
+        console.log('Message length:', message.length);
+        console.log('Fonnte URL:', fonnteUrl);
+        console.log('Token exists:', !!fonnteToken);
+        console.log('Token length:', fonnteToken ? fonnteToken.length : 0);
+        
+        let response;
+        try {
+            // Use global fetch (Node.js 18+)
+            // Railway uses Node.js 18+, so native fetch is available
+            if (typeof fetch === 'undefined') {
+                throw new Error('fetch is not available. Railway requires Node.js 18+ which has native fetch support.');
+            }
+            response = await fetch(fonnteUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': fonnteToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData.toString()
+            });
+            console.log('Fetch completed. Status:', response.status, response.statusText);
+        } catch (fetchError) {
+            console.error('Fetch error:', fetchError);
+            console.error('Fetch error name:', fetchError.name);
+            console.error('Fetch error message:', fetchError.message);
+            console.error('Fetch error stack:', fetchError.stack);
+            throw new Error(`Gagal menghubungi Fonnte API: ${fetchError.message}`);
+        }
+
+        // Try to parse response as JSON, but handle non-JSON responses
+        let responseData;
+        const responseText = await response.text();
+        
+        try {
+            responseData = JSON.parse(responseText);
+        } catch (parseError) {
+            // If response is not JSON, treat it as text
+            console.log('Fonnte API response (non-JSON):', responseText);
+            responseData = { 
+                status: response.ok ? 'success' : 'error',
+                message: responseText || 'Unknown response',
+                raw: responseText
+            };
+        }
+
+        console.log('Fonnte API response:', responseData);
+
+        // Check if Fonnte API returned an error
+        if (!response.ok || (responseData.status === false || responseData.status === 'false')) {
+            console.error('Fonnte API error:', responseData);
+            return res.status(response.status || 500).json({ 
+                message: 'Gagal mengirim pesan WhatsApp',
+                error: responseData.reason || responseData.message || responseData.raw || 'Unknown error from Fonnte API'
+            });
+        }
+
+        return res.json({
+            message: 'Pesan WhatsApp berhasil dikirim',
+            data: responseData
+        });
+    } catch (error) {
+        console.error('Send WhatsApp message error:', error);
+        console.error('Error stack:', error.stack);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        
+        // Return detailed error for debugging (in production, you might want to hide this)
+        return res.status(500).json({ 
+            message: 'Terjadi kesalahan pada server',
+            error: error.message || 'Unknown error',
+            details: process.env.NODE_ENV === 'development' ? {
+                name: error.name,
+                stack: error.stack
+            } : undefined
+        });
+    }
+};
+
+// Akhiri Absen - Add Alpha for all students who haven't absen today
+export const akhiriAbsen = async (req, res) => {
+    try {
+        // Get current date in YYYY-MM-DD format (WIB/Asia/Jakarta timezone)
+        const now = new Date();
+        const wibOffset = 7 * 60; // WIB is UTC+7
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        const today = wibTime.toISOString().split('T')[0];
+
+        // Get all students from siswa_xirpl
+        const { data: allSiswa, error: siswaError } = await supabase
+            .from('siswa_xirpl')
+            .select('id, nama, nis, rfid, role')
+            .order('nis', { ascending: true });
+
+        if (siswaError) {
+            console.error('Error fetching siswa:', siswaError);
+            return res.status(500).json({ message: 'Gagal mengambil data siswa' });
+        }
+
+        if (!allSiswa || allSiswa.length === 0) {
+            return res.status(404).json({ message: 'Tidak ada data siswa' });
+        }
+
+        // Get all history records for today
+        const { data: todayHistory, error: historyError } = await supabase
+            .from('history')
+            .select('nis')
+            .eq('tanggal', today);
+
+        if (historyError) {
+            console.error('Error fetching history:', historyError);
+            return res.status(500).json({ message: 'Gagal mengambil data history' });
+        }
+
+        // Create a set of NIS that already have history today
+        const sudahAbsenNIS = new Set();
+        if (todayHistory && todayHistory.length > 0) {
+            todayHistory.forEach(record => {
+                sudahAbsenNIS.add(record.nis);
+            });
+        }
+
+        // Filter students who haven't absen today
+        const belumAbsen = allSiswa.filter(siswa => !sudahAbsenNIS.has(siswa.nis));
+
+        if (belumAbsen.length === 0) {
+            return res.json({
+                message: 'Semua siswa sudah absen hari ini',
+                added: 0
+            });
+        }
+
+        // Get current time in HH:MM:SS format
+        const hours = String(wibTime.getUTCHours()).padStart(2, '0');
+        const minutes = String(wibTime.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(wibTime.getUTCSeconds()).padStart(2, '0');
+        const waktu = `${hours}:${minutes}:${seconds}`;
+
+        // Prepare insert data for all students who haven't absen
+        const insertData = belumAbsen.map(siswa => ({
+            nis: siswa.nis,
+            nama: siswa.nama || null,
+            role: siswa.role || null,
+            rfid: siswa.rfid || null,
+            tanggal: today,
+            waktu: waktu,
+            status: 'Alpha',
+            keterangan: 'Tidak Ada Keterangan'
+        }));
+
+        console.log(`Adding Alpha for ${insertData.length} students who haven't absen today`);
+
+        // Insert all records at once
+        const { data: newHistory, error: insertError } = await supabase
+            .from('history')
+            .insert(insertData)
+            .select();
+
+        if (insertError) {
+            console.error('Error inserting history:', insertError);
+            return res.status(500).json({ 
+                message: 'Gagal menambahkan absen Alpha',
+                error: insertError.message 
+            });
+        }
+
+        console.log(`Successfully added ${newHistory.length} Alpha records`);
+
+        // Set alat status to NonActive after akhiri absen
+        const { error: updateActionError } = await supabase
+            .from('action')
+            .update({ status: 'NonActive' })
+            .eq('tanggal', today);
+
+        if (updateActionError) {
+            console.error('Error updating action status:', updateActionError);
+            // Don't fail the request, just log the error
+        } else {
+            console.log('Alat status updated to NonActive');
+        }
+
+        return res.json({
+            message: `Absen hari ini berhasil diakhiri. ${newHistory.length} siswa ditambahkan dengan status Alpha. Status alat diubah menjadi NonActive.`,
+            added: newHistory.length,
+            students: newHistory.map(h => ({ nis: h.nis, nama: h.nama }))
+        });
+    } catch (error) {
+        console.error('Akhiri absen error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan saat mengakhiri absen' });
+    }
+};
+
+// Get latest RFID from kartu_tidak_terdaftar
+export const getLatestRFID = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('kartu_tidak_terdaftar')
+            .select('*')
+            .order('id', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching latest RFID:', error);
+            return res.status(500).json({ message: 'Gagal mengambil data RFID terbaru' });
+        }
+
+        return res.json({
+            message: 'Data RFID terbaru berhasil diambil',
+            rfid: data || null
+        });
+    } catch (error) {
+        console.error('Get latest RFID error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Register RFID to student and delete from kartu_tidak_terdaftar
+export const registerRFID = async (req, res) => {
+    try {
+        const { nis, rfid } = req.body;
+
+        if (!nis || !rfid) {
+            return res.status(400).json({ message: 'NIS dan RFID diperlukan' });
+        }
+
+        // 1. Check if student exists
+        const { data: siswa, error: fetchError } = await supabase
+            .from('siswa_xirpl')
+            .select('nama')
+            .eq('nis', nis)
+            .single();
+
+        if (fetchError || !siswa) {
+            return res.status(404).json({ message: 'Siswa dengan NIS tersebut tidak ditemukan' });
+        }
+
+        // 2. Update siswa_xirpl with the new RFID
+        const { error: updateError } = await supabase
+            .from('siswa_xirpl')
+            .update({ rfid })
+            .eq('nis', nis);
+
+        if (updateError) {
+            console.error('Error updating student RFID:', updateError);
+            if (updateError.code === '23505') { // Unique constraint violation
+                return res.status(400).json({ message: 'RFID sudah digunakan oleh siswa lain' });
+            }
+            return res.status(500).json({ message: 'Gagal mendaftarkan RFID ke siswa' });
+        }
+
+        // 3. Delete all records with this RFID from kartu_tidak_terdaftar
+        const { error: deleteError } = await supabase
+            .from('kartu_tidak_terdaftar')
+            .delete()
+            .eq('rfid', rfid);
+
+        if (deleteError) {
+            console.error('Error deleting from kartu_tidak_terdaftar:', deleteError);
+            // We don't necessarily fail the whole request if this fails, but it's good to log
+        }
+
+        return res.json({
+            message: `RFID berhasil didaftarkan ke siswa ${siswa.nama}`
+        });
+    } catch (error) {
+        console.error('Register RFID error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+

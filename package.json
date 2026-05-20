@@ -1,0 +1,12 @@
+{
+  "name": "absensi-kehadiran",
+  "version": "1.0.0",
+  "description": "Aplikasi Absensi Kehadiran",
+  "scripts": {
+    "start": "npm start",
+    "heroku-prebuild": "npm install",
+    "heroku-build": "npm install",
+    "heroku-postbuild": "npm run build"
+  },
+  "packageManager": "pnpm@10.22.0"
+}
