@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction, getTodayRecap, sendWhatsAppMessage, getStudentAnalysis, getStudentStatistics, akhiriAbsen, getLatestRFID, registerRFID } from '../controllers/admin.controllers.js';
+import { getAllSiswa, updateSiswa, getSiswaBelumAbsen, getAllHistory, updateHistoryStatus, deleteHistory, createHistory, getActionToday, createOrUpdateAction, getTodayRecap, sendWhatsAppMessage, getStudentAnalysis, getStudentStatistics, akhiriAbsen, getLatestRFID, registerRFID, getRecentRegistrations, getAllMasterUsers } from '../controllers/admin.controllers.js';
 import { authenticateToken, requireAdmin } from '../middlewares/auth.js';
 
 const router = Router();
@@ -24,6 +24,8 @@ router.post('/whatsapp/send', authenticateToken, requireAdmin, sendWhatsAppMessa
 // RFID Registration routes
 router.get('/rfid-terbaru', authenticateToken, requireAdmin, getLatestRFID);
 router.post('/daftar-rfid', authenticateToken, requireAdmin, registerRFID);
+router.get('/pendaftaran/recent', authenticateToken, requireAdmin, getRecentRegistrations);
+router.get('/pendaftaran/users', authenticateToken, requireAdmin, getAllMasterUsers);
 
 export default router;
 

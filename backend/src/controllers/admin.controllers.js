@@ -1202,41 +1202,56 @@ export const getLatestRFID = async (req, res) => {
     }
 };
 
-// Register RFID to student and delete from kartu_tidak_terdaftar
+// Register NEW user with RFID and delete from kartu_tidak_terdaftar
 export const registerRFID = async (req, res) => {
     try {
-        const { nis, rfid } = req.body;
+        const { nama, nomor_induk, rfid, kelas, jurusan } = req.body;
 
-        if (!nis || !rfid) {
-            return res.status(400).json({ message: 'NIS dan RFID diperlukan' });
+        if (!nama || !nomor_induk || !rfid) {
+            return res.status(400).json({ message: 'Nama, Nomor Induk, dan RFID diperlukan' });
         }
 
-        // 1. Check if student exists
-        const { data: siswa, error: fetchError } = await supabase
-            .from('siswa_xirpl')
-            .select('nama')
-            .eq('nis', nis)
-            .single();
+        // 1. Check if nomor_induk or rfid already exists in master_users
+        const { data: existingUser, error: checkError } = await supabase
+            .from('master_users')
+            .select('id')
+            .or(`nomor_induk.eq.${nomor_induk},rfid.eq.${rfid}`)
+            .maybeSingle();
 
-        if (fetchError || !siswa) {
-            return res.status(404).json({ message: 'Siswa dengan NIS tersebut tidak ditemukan' });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Nomor Induk atau RFID sudah terdaftar' });
         }
 
-        // 2. Update siswa_xirpl with the new RFID
-        const { error: updateError } = await supabase
-            .from('siswa_xirpl')
-            .update({ rfid })
-            .eq('nis', nis);
+        // 2. Prepare timestamp (WIB)
+        const now = new Date();
+        const wibOffset = 7 * 60; 
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const wibTime = new Date(utc + (wibOffset * 60000));
+        
+        const tanggal = wibTime.toISOString().split('T')[0];
+        const waktu = wibTime.toISOString().split('T')[1].split('.')[0];
 
-        if (updateError) {
-            console.error('Error updating student RFID:', updateError);
-            if (updateError.code === '23505') { // Unique constraint violation
-                return res.status(400).json({ message: 'RFID sudah digunakan oleh siswa lain' });
-            }
-            return res.status(500).json({ message: 'Gagal mendaftarkan RFID ke siswa' });
+        // 3. Insert NEW user into master_users
+        const { error: insertError } = await supabase
+            .from('master_users')
+            .insert([{ 
+                nama,
+                nomor_induk,
+                rfid,
+                kelas: kelas || 'Umum',
+                jurusan: jurusan || 'Pengunjung',
+                tanggal_daftar: tanggal,
+                waktu_daftar: waktu,
+                status_aktif: true,
+                role: 'Siswa' // Default role
+            }]);
+
+        if (insertError) {
+            console.error('Error inserting new user:', insertError);
+            return res.status(500).json({ message: 'Gagal mendaftarkan pengunjung baru' });
         }
 
-        // 3. Delete all records with this RFID from kartu_tidak_terdaftar
+        // 4. Delete all records with this RFID from kartu_tidak_terdaftar
         const { error: deleteError } = await supabase
             .from('kartu_tidak_terdaftar')
             .delete()
@@ -1244,14 +1259,62 @@ export const registerRFID = async (req, res) => {
 
         if (deleteError) {
             console.error('Error deleting from kartu_tidak_terdaftar:', deleteError);
-            // We don't necessarily fail the whole request if this fails, but it's good to log
         }
 
         return res.json({
-            message: `RFID berhasil didaftarkan ke siswa ${siswa.nama}`
+            message: `Berhasil! ${nama} telah terdaftar.`
         });
     } catch (error) {
         console.error('Register RFID error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get recently registered users from master_users
+export const getRecentRegistrations = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('master_users')
+            .select('id, nama, nomor_induk, rfid, kelas, jurusan, tanggal_daftar, waktu_daftar')
+            .not('rfid', 'is', null)
+            .order('tanggal_daftar', { ascending: false })
+            .order('waktu_daftar', { ascending: false })
+            .limit(10);
+
+        if (error) {
+            console.error('Error fetching recent registrations:', error);
+            return res.status(500).json({ message: 'Gagal mengambil data pendaftaran terbaru' });
+        }
+
+        return res.json({
+            message: 'Data pendaftaran terbaru berhasil diambil',
+            registrations: data || []
+        });
+    } catch (error) {
+        console.error('Get recent registrations error:', error);
+        return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// Get all users from master_users for registration dropdown
+export const getAllMasterUsers = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('master_users')
+            .select('id, nama, nomor_induk, rfid, kelas, jurusan')
+            .order('nama', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching master users:', error);
+            return res.status(500).json({ message: 'Gagal mengambil data user' });
+        }
+
+        return res.json({
+            message: 'Data master users berhasil diambil',
+            users: data || []
+        });
+    } catch (error) {
+        console.error('Get all master users error:', error);
         return res.status(500).json({ message: 'Terjadi kesalahan pada server' });
     }
 };

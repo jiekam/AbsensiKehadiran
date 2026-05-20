@@ -1652,7 +1652,18 @@ function switchPage(page) {
         if (pendaftaranPage) pendaftaranPage.classList.add('active');
         // Load pendaftaran data
         loadLatestRfid();
-        loadStudentsForRegistration();
+        loadRecentRegistrations();
+        
+        // Start polling for live view every 3 seconds while on this page
+        if (window.registrationPolling) clearInterval(window.registrationPolling);
+        window.registrationPolling = setInterval(() => {
+            if (document.getElementById('pendaftaranPage').classList.contains('active')) {
+                loadLatestRfid();
+                loadRecentRegistrations();
+            } else {
+                clearInterval(window.registrationPolling);
+            }
+        }, 3000);
     }
 }
 
@@ -3519,14 +3530,14 @@ async function loadLatestRfid() {
     }
 }
 
-// Load students for registration dropdown
-async function loadStudentsForRegistration() {
-    const select = document.getElementById('daftarSiswaSelect');
-    if (!select) return;
+// Load recent registrations from master_users
+async function loadRecentRegistrations() {
+    const listContainer = document.getElementById('recentRegistrationsList');
+    if (!listContainer) return;
 
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/admin/siswa`, {
+        const response = await fetch(`${API_URL}/api/admin/pendaftaran/recent`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -3534,21 +3545,50 @@ async function loadStudentsForRegistration() {
             }
         });
 
-        if (!response.ok) throw new Error('Gagal mengambil data siswa');
+        if (!response.ok) throw new Error('Gagal mengambil data pendaftaran');
 
         const data = await response.json();
-        const students = data.siswa || [];
+        const registrations = data.registrations || [];
 
-        select.innerHTML = '<option value="">-- Pilih Siswa --</option>';
-        students.forEach(siswa => {
-            const option = document.createElement('option');
-            option.value = siswa.nis;
-            option.textContent = `${siswa.nama} (${siswa.nis})${siswa.rfid ? ' - Sudah ada RFID' : ''}`;
-            select.appendChild(option);
+        if (registrations.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-light);">Belum ada pendaftaran hari ini.</div>';
+            document.getElementById('lastRegisteredCard').style.display = 'none';
+            return;
+        }
+
+        // Update Highlight Card with the latest one
+        const latest = registrations[0];
+        document.getElementById('lastRegisteredCard').style.display = 'block';
+        document.getElementById('lastRegNama').textContent = latest.nama;
+        document.getElementById('lastRegDetail').textContent = `${latest.kelas} ${latest.jurusan || ''}`;
+        document.getElementById('lastRegTime').textContent = convertUTCToWIB(latest.waktu_daftar);
+        document.getElementById('lastRegRfid').textContent = latest.rfid;
+
+        // Update List
+        listContainer.innerHTML = '';
+        registrations.forEach(reg => {
+            const item = document.createElement('div');
+            item.style.padding = '12px 20px';
+            item.style.borderBottom = '1px solid var(--border-color)';
+            item.style.display = 'flex';
+            item.style.justifyContent = 'space-between';
+            item.style.alignItems = 'center';
+            item.style.animation = 'fadeIn 0.5s ease-out';
+            
+            item.innerHTML = `
+                <div>
+                    <h4 style="margin: 0; font-size: 15px;">${reg.nama}</h4>
+                    <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-light);">${reg.kelas} | ${reg.nomor_induk}</p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="margin: 0; font-size: 13px; font-weight: 600; color: var(--primary);">${convertUTCToWIB(reg.waktu_daftar)}</p>
+                    <p style="margin: 4px 0 0; font-size: 11px; color: var(--text-light); font-family: monospace;">${reg.rfid}</p>
+                </div>
+            `;
+            listContainer.appendChild(item);
         });
     } catch (error) {
-        console.error('Error loading students for registration:', error);
-        select.innerHTML = '<option value="">Gagal memuat data siswa</option>';
+        console.error('Error loading recent registrations:', error);
     }
 }
 
@@ -3556,16 +3596,19 @@ async function loadStudentsForRegistration() {
 async function handlePendaftaranSubmit(e) {
     e.preventDefault();
     
-    const nis = document.getElementById('daftarSiswaSelect').value;
+    const nama = document.getElementById('daftarNamaInput').value;
+    const nomor_induk = document.getElementById('daftarNomorIndukInput').value;
+    const kelas = document.getElementById('daftarKelasInput').value;
+    const jurusan = document.getElementById('daftarJurusanInput').value;
     const rfid = document.getElementById('daftarRfidInput').value;
     const submitBtn = document.getElementById('submitPendaftaranBtn');
 
-    if (!nis || !rfid) {
-        showToast('Silakan pilih siswa dan pastikan RFID terisi', 'error');
+    if (!nama || !nomor_induk || !rfid) {
+        showToast('Silakan isi Nama, Nomor Induk, dan pastikan RFID terisi', 'error');
         return;
     }
 
-    showLoading('Mendaftarkan kartu...');
+    showLoading('Mendaftarkan pengunjung...');
     if (submitBtn) submitBtn.disabled = true;
 
     try {
@@ -3576,13 +3619,13 @@ async function handlePendaftaranSubmit(e) {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ nis, rfid })
+            body: JSON.stringify({ nama, nomor_induk, rfid, kelas, jurusan })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || 'Gagal mendaftarkan kartu');
+            throw new Error(data.message || 'Gagal mendaftarkan pengunjung');
         }
 
         showToast(data.message, 'success');
@@ -3590,7 +3633,7 @@ async function handlePendaftaranSubmit(e) {
         // Reset form and refresh data
         document.getElementById('pendaftaranForm').reset();
         loadLatestRfid();
-        loadStudentsForRegistration();
+        loadRecentRegistrations();
     } catch (error) {
         console.error('Error during registration:', error);
         showToast(error.message, 'error');
@@ -3602,6 +3645,6 @@ async function handlePendaftaranSubmit(e) {
 
 // Make functions available globally
 window.loadLatestRfid = loadLatestRfid;
-window.loadStudentsForRegistration = loadStudentsForRegistration;
+window.loadRecentRegistrations = loadRecentRegistrations;
 window.handlePendaftaranSubmit = handlePendaftaranSubmit;
 

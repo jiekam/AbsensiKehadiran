@@ -352,67 +352,128 @@
                         </button>
                     </div>
 
-                    <div class="admin-content">
-                        <!-- RFID Card Display -->
-                        <div class="info-card">
-                            <div class="card-header">
-                                <h3>RFID Terbaru (Tidak Terdaftar)</h3>
+                    <div class="admin-content" style="grid-template-columns: 1fr 1fr; gap: 24px;">
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <!-- RFID Card Display -->
+                            <div class="info-card" style="border: 2px solid var(--primary);">
+                                <div class="card-header">
+                                    <h3>RFID Terbaru (Tidak Terdaftar)</h3>
+                                </div>
+                                <div class="card-body" id="latestRfidContainer">
+                                    <div class="loading-cell" id="rfidLoadingCell">
+                                        <div class="loading-boxes">
+                                            <div class="loading-box"></div>
+                                            <div class="loading-box"></div>
+                                            <div class="loading-box"></div>
+                                        </div>
+                                        <span>Memuat data RFID...</span>
+                                    </div>
+                                    <div id="rfidInfo" style="display: none;">
+                                        <div style="display: flex; align-items: center; gap: 20px;">
+                                            <div style="width: 80px; height: 80px; background: var(--primary); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M7 12H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M12 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p style="margin: 0; color: var(--text-light); font-size: 14px;">Nomor RFID:</p>
+                                                <h2 id="latestRfidNumber" style="margin: 4px 0; font-size: 32px; font-weight: 700; color: var(--primary); letter-spacing: 2px;">-</h2>
+                                                <p id="latestRfidTime" style="margin: 0; color: var(--text-light); font-size: 13px;">Ditemukan pada: -</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="noRfidMessage" style="display: none; text-align: center; padding: 20px;">
+                                        <p style="color: var(--text-light);">Tidak ada kartu RFID baru yang terdeteksi.</p>
+                                        <p style="font-size: 13px; color: var(--text-light);">Silakan tap kartu pada alat untuk mendaftarkan.</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card-body" id="latestRfidContainer">
-                                <div class="loading-cell" id="rfidLoadingCell">
-                                    <div class="loading-boxes">
-                                        <div class="loading-box"></div>
-                                        <div class="loading-box"></div>
-                                        <div class="loading-box"></div>
-                                    </div>
-                                    <span>Memuat data RFID...</span>
+
+                            <!-- Registration Form -->
+                            <div class="info-card">
+                                <div class="card-header">
+                                    <h3>Form Pendaftaran Pengunjung</h3>
                                 </div>
-                                <div id="rfidInfo" style="display: none;">
-                                    <div style="display: flex; align-items: center; gap: 20px;">
-                                        <div style="width: 80px; height: 80px; background: var(--bg-light); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
-                                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                <path d="M7 12H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                <path d="M12 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                            </svg>
+                                <div class="card-body">
+                                    <form id="pendaftaranForm">
+                                        <div class="form-group">
+                                            <label for="daftarNamaInput">Nama Lengkap:</label>
+                                            <input type="text" id="daftarNamaInput" class="form-input" placeholder="Masukkan nama pengunjung..." required>
                                         </div>
-                                        <div>
-                                            <p style="margin: 0; color: var(--text-light); font-size: 14px;">Nomor RFID:</p>
-                                            <h2 id="latestRfidNumber" style="margin: 4px 0; font-size: 32px; font-weight: 700; color: var(--primary); letter-spacing: 2px;">-</h2>
-                                            <p id="latestRfidTime" style="margin: 0; color: var(--text-light); font-size: 13px;">Ditemukan pada: -</p>
+                                        <div class="form-group">
+                                            <label for="daftarNomorIndukInput">Nomor Induk / No. HP:</label>
+                                            <input type="text" id="daftarNomorIndukInput" class="form-input" placeholder="Contoh: 08123456789" required>
                                         </div>
-                                    </div>
-                                </div>
-                                <div id="noRfidMessage" style="display: none; text-align: center; padding: 20px;">
-                                    <p style="color: var(--text-light);">Tidak ada kartu RFID baru yang terdeteksi.</p>
-                                    <p style="font-size: 13px; color: var(--text-light);">Silakan tap kartu pada alat untuk mendaftarkan.</p>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div class="form-group">
+                                                <label for="daftarKelasInput">Kelas / Instansi:</label>
+                                                <input type="text" id="daftarKelasInput" class="form-input" placeholder="Contoh: XII RPL 1">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="daftarJurusanInput">Jurusan / Jabatan:</label>
+                                                <input type="text" id="daftarJurusanInput" class="form-input" placeholder="Contoh: Programmer">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="daftarRfidInput">RFID (Otomatis):</label>
+                                            <input type="text" id="daftarRfidInput" class="form-input" readonly placeholder="Tap kartu untuk mengisi RFID..." required>
+                                        </div>
+                                        <div style="margin-top: 24px;">
+                                            <button type="submit" class="btn-primary" id="submitPendaftaranBtn" style="width: 100%; justify-content: center; height: 48px; font-size: 16px; font-weight: 600;">
+                                                <span class="btn-text">Daftarkan Sekarang</span>
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Registration Form -->
-                        <div class="info-card">
-                            <div class="card-header">
-                                <h3>Form Pendaftaran Siswa</h3>
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <!-- Highlight Last Registered -->
+                            <div id="lastRegisteredCard" class="info-card" style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; display: none;">
+                                <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                                    <h3 style="color: white;">Pendaftar Terakhir</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div style="display: flex; align-items: center; gap: 16px;">
+                                        <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                <circle cx="12" cy="7" r="4"></circle>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h2 id="lastRegNama" style="margin: 0; font-size: 24px; font-weight: 700;">-</h2>
+                                            <p id="lastRegDetail" style="margin: 4px 0 0; opacity: 0.9; font-size: 14px;">-</p>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between;">
+                                        <div>
+                                            <p style="margin: 0; font-size: 12px; opacity: 0.8;">Waktu Daftar</p>
+                                            <p id="lastRegTime" style="margin: 4px 0 0; font-weight: 600;">-</p>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <p style="margin: 0; font-size: 12px; opacity: 0.8;">RFID</p>
+                                            <p id="lastRegRfid" style="margin: 4px 0 0; font-weight: 600;">-</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <form id="pendaftaranForm">
-                                    <div class="form-group">
-                                        <label for="daftarSiswaSelect">Pilih Siswa:</label>
-                                        <select id="daftarSiswaSelect" class="form-select" required>
-                                            <option value="">Memuat data siswa...</option>
-                                        </select>
+
+                            <!-- Live Registration List -->
+                            <div class="info-card" style="flex: 1;">
+                                <div class="card-header">
+                                    <h3>Pendaftar Terbaru (Live View)</h3>
+                                </div>
+                                <div class="card-body" style="padding: 0; max-height: 400px; overflow-y: auto;">
+                                    <div id="recentRegistrationsList">
+                                        <div class="loading-cell">
+                                            <span>Memuat pendaftar terbaru...</span>
+                                        </div>
                                     </div>
-                                    <div class="form-group">
-                                        <label for="daftarRfidInput">RFID (Otomatis):</label>
-                                        <input type="text" id="daftarRfidInput" class="form-input" readonly placeholder="Tap kartu untuk mengisi RFID..." required>
-                                    </div>
-                                    <div style="margin-top: 24px;">
-                                        <button type="submit" class="btn-primary" id="submitPendaftaranBtn" style="width: 100%; justify-content: center; height: 48px;">
-                                            <span class="btn-text">Daftarkan Kartu</span>
-                                        </button>
-                                    </div>
-                                </form>
+                                </div>
                             </div>
                         </div>
                     </div>
