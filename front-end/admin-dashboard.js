@@ -1658,7 +1658,7 @@ function switchPage(page) {
         if (window.registrationPolling) clearInterval(window.registrationPolling);
         window.registrationPolling = setInterval(() => {
             if (document.getElementById('pendaftaranPage').classList.contains('active')) {
-                loadLatestRfid();
+                loadLatestRfid(true); // Silent update
                 loadRecentRegistrations();
             } else {
                 clearInterval(window.registrationPolling);
@@ -3482,7 +3482,7 @@ window.showStudentStatistics = showStudentStatistics;
 // ==================== PENDAFTARAN RFID FUNCTIONS ====================
 
 // Load latest RFID from kartu_tidak_terdaftar
-async function loadLatestRfid() {
+async function loadLatestRfid(isSilent = false) {
     const loadingCell = document.getElementById('rfidLoadingCell');
     const rfidInfo = document.getElementById('rfidInfo');
     const noRfidMessage = document.getElementById('noRfidMessage');
@@ -3490,9 +3490,12 @@ async function loadLatestRfid() {
     const latestRfidTime = document.getElementById('latestRfidTime');
     const daftarRfidInput = document.getElementById('daftarRfidInput');
 
-    if (loadingCell) loadingCell.style.display = 'flex';
-    if (rfidInfo) rfidInfo.style.display = 'none';
-    if (noRfidMessage) noRfidMessage.style.display = 'none';
+    // Only show loading if not silent
+    if (!isSilent) {
+        if (loadingCell) loadingCell.style.display = 'flex';
+        if (rfidInfo) rfidInfo.style.display = 'none';
+        if (noRfidMessage) noRfidMessage.style.display = 'none';
+    }
 
     try {
         const token = localStorage.getItem('token');
@@ -3511,20 +3514,30 @@ async function loadLatestRfid() {
         if (loadingCell) loadingCell.style.display = 'none';
 
         if (data.rfid) {
-            if (rfidInfo) rfidInfo.style.display = 'block';
-            if (latestRfidNumber) latestRfidNumber.textContent = data.rfid.rfid;
+            // Only update if value is different to prevent flickering
+            if (latestRfidNumber && latestRfidNumber.textContent !== data.rfid.rfid) {
+                latestRfidNumber.textContent = data.rfid.rfid;
+                if (daftarRfidInput) daftarRfidInput.value = data.rfid.rfid;
+            }
+            
             if (latestRfidTime) {
                 const waktu = convertUTCToWIB(data.rfid.waktu);
-                latestRfidTime.textContent = `Ditemukan pada: ${data.rfid.tanggal} ${waktu}`;
+                const timeStr = `Ditemukan pada: ${data.rfid.tanggal} ${waktu}`;
+                if (latestRfidTime.textContent !== timeStr) {
+                    latestRfidTime.textContent = timeStr;
+                }
             }
-            if (daftarRfidInput) daftarRfidInput.value = data.rfid.rfid;
+            
+            if (rfidInfo) rfidInfo.style.display = 'block';
+            if (noRfidMessage) noRfidMessage.style.display = 'none';
         } else {
             if (noRfidMessage) noRfidMessage.style.display = 'block';
+            if (rfidInfo) rfidInfo.style.display = 'none';
             if (daftarRfidInput) daftarRfidInput.value = '';
         }
     } catch (error) {
         console.error('Error loading latest RFID:', error);
-        if (loadingCell) {
+        if (!isSilent && loadingCell) {
             loadingCell.innerHTML = `<p style="color: var(--danger);">${error.message}</p>`;
         }
     }
@@ -3549,6 +3562,11 @@ async function loadRecentRegistrations() {
 
         const data = await response.json();
         const registrations = data.registrations || [];
+
+        // Check if data is same as current to avoid flickering
+        const dataString = JSON.stringify(registrations);
+        if (window.lastRegistrationsData === dataString) return;
+        window.lastRegistrationsData = dataString;
 
         if (registrations.length === 0) {
             listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-light);">Belum ada pendaftaran hari ini.</div>';
